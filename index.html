@@ -1,0 +1,1161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dev Setup Builder</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f6f2;
+      --panel: #ffffff;
+      --panel-2: #f0f4f1;
+      --ink: #222522;
+      --muted: #62685f;
+      --line: #d9ded5;
+      --accent: #2f7d55;
+      --accent-2: #a45b16;
+      --danger: #a13535;
+      --shadow: 0 18px 48px rgba(31, 36, 28, 0.12);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 24px;
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      min-width: 0;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .brand p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .button {
+      border: 1px solid var(--line);
+      background: #ffffff;
+      color: var(--ink);
+      border-radius: 6px;
+      padding: 9px 12px;
+      min-height: 38px;
+      cursor: pointer;
+    }
+
+    .button:hover {
+      border-color: #aeb9ac;
+      background: #f9faf7;
+    }
+
+    .button.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #ffffff;
+    }
+
+    .button.primary:hover {
+      background: #286f4b;
+    }
+
+    .builder {
+      display: grid;
+      grid-template-columns: minmax(320px, 440px) minmax(0, 1fr);
+      gap: 18px;
+      padding: 18px;
+      min-height: 0;
+    }
+
+    .panel {
+      min-height: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+    }
+
+    .section {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section.compact {
+      padding-top: 12px;
+      padding-bottom: 12px;
+    }
+
+    .section:last-child {
+      border-bottom: 0;
+    }
+
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .section-title h2 {
+      margin: 0;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      color: var(--muted);
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 4px;
+      padding: 4px;
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .segmented label {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 36px;
+      border-radius: 6px;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .segmented input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .segmented label:has(input:checked) {
+      background: #ffffff;
+      color: var(--ink);
+      border: 1px solid #cbd4c9;
+    }
+
+    .preset-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .package-list {
+      overflow: auto;
+      padding: 8px 0;
+    }
+
+    .group {
+      padding: 8px 16px 6px;
+    }
+
+    .group h3 {
+      margin: 8px 0;
+      font-size: 12px;
+      color: var(--accent-2);
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .package {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 10px;
+      align-items: start;
+      min-height: 58px;
+      padding: 10px 0;
+      border-top: 1px solid #edf0eb;
+      cursor: pointer;
+    }
+
+    .package:first-of-type {
+      border-top: 0;
+    }
+
+    .package input {
+      width: 18px;
+      height: 18px;
+      margin: 3px 0 0;
+      accent-color: var(--accent);
+    }
+
+    .package strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.3;
+    }
+
+    .package span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .settings {
+      display: grid;
+      gap: 10px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .field input {
+      width: 100%;
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      color: var(--ink);
+      background: #ffffff;
+    }
+
+    .preview {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    .preview-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .preview-head h2 {
+      margin: 0;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #ffffff;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    textarea {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 420px;
+      resize: none;
+      border: 0;
+      padding: 16px;
+      background: #101510;
+      color: #e9efe8;
+      font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      outline: none;
+    }
+
+    .status {
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 16px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .status strong {
+      color: var(--ink);
+    }
+
+    .warning {
+      color: var(--danger);
+    }
+
+    @media (max-width: 920px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .actions {
+        justify-content: flex-start;
+      }
+
+      .builder {
+        grid-template-columns: 1fr;
+      }
+
+      .controls {
+        max-height: none;
+      }
+
+      textarea {
+        min-height: 520px;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .builder {
+        padding: 10px;
+      }
+
+      .topbar {
+        padding: 14px;
+      }
+
+      .preset-row {
+        grid-template-columns: 1fr;
+      }
+
+      .preview-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>Dev Setup Builder</h1>
+        <p>Build a macOS or Windows setup script from the tools you select.</p>
+      </div>
+      <div class="actions">
+        <button class="button" id="copyScript" type="button">Copy script</button>
+        <button class="button primary" id="downloadScript" type="button">Download</button>
+      </div>
+    </header>
+
+    <div class="builder">
+      <section class="panel controls" aria-label="Setup builder controls">
+        <div class="section compact">
+          <div class="section-title">
+            <h2>Target</h2>
+          </div>
+          <div class="segmented" role="radiogroup" aria-label="Target operating system">
+            <label><input type="radio" name="os" value="mac" checked> macOS</label>
+            <label><input type="radio" name="os" value="win"> Windows</label>
+          </div>
+        </div>
+
+        <div class="section compact">
+          <div class="section-title">
+            <h2>Preset</h2>
+          </div>
+          <div class="preset-row">
+            <button class="button" data-preset="minimal" type="button">Minimal</button>
+            <button class="button" data-preset="agent" type="button">Agent</button>
+            <button class="button" data-preset="clear" type="button">Clear</button>
+          </div>
+        </div>
+
+        <div class="package-list" id="packageList" aria-label="Installable tools"></div>
+
+        <div class="section">
+          <div class="section-title">
+            <h2>Git defaults</h2>
+          </div>
+          <div class="settings">
+            <div class="field">
+              <label for="gitName">Name used only when Git identity is selected</label>
+              <input id="gitName" value="Claude Code" autocomplete="name">
+            </div>
+            <div class="field">
+              <label for="gitEmail">Email used only when Git identity is selected</label>
+              <input id="gitEmail" value="noreply@anthropic.com" autocomplete="email">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel preview" aria-label="Generated script preview">
+        <div class="preview-head">
+          <h2 id="previewTitle">setup-mac.command</h2>
+          <div class="meta" id="metaLine"></div>
+        </div>
+        <textarea id="scriptPreview" spellcheck="false" aria-label="Generated script"></textarea>
+        <div class="status">
+          <span id="statusText">Ready</span>
+          <span id="dependencyText"></span>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const PACKAGES = [
+      {
+        id: "git",
+        group: "Core",
+        label: "Git",
+        note: "Version control and shell integration.",
+        presets: ["minimal", "agent"],
+        deps: { mac: ["homebrew"], win: [] },
+        mac: () => ['brew_formula "Git" "git" "git"'],
+        win: () => ["Install-Winget -Label 'Git' -PackageId 'Git.Git' -Command 'git' -ExtraArgs @('--scope','user')"]
+      },
+      {
+        id: "node",
+        group: "Core",
+        label: "Node.js",
+        note: "JavaScript runtime. Required for npm global CLIs.",
+        presets: ["minimal", "agent"],
+        deps: { mac: ["homebrew"], win: [] },
+        mac: () => ['brew_formula "Node.js" "node" "node"'],
+        win: () => ["Install-Winget -Label 'Node.js LTS' -PackageId 'OpenJS.NodeJS.LTS' -Command 'node' -ExtraArgs @('--scope','user')"]
+      },
+      {
+        id: "python",
+        group: "Core",
+        label: "Python",
+        note: "Latest package-manager stable Python.",
+        presets: ["minimal", "agent"],
+        deps: { mac: ["homebrew"], win: [] },
+        mac: () => ['brew_formula "Python" "python" "python3"'],
+        win: () => [
+          "$pythonOk = $false",
+          "foreach ($candidate in @('Python.Python.3.14','Python.Python.3.13','Python.Python.3.12')) {",
+          "  if ($pythonOk) { break }",
+          "  Install-Winget -Label 'Python' -PackageId $candidate -Command 'python' -ExtraArgs @('--scope','user')",
+          "  if (Has-Command 'python') { $pythonOk = $true }",
+          "}"
+        ]
+      },
+      {
+        id: "uv",
+        group: "Core",
+        label: "uv",
+        note: "Python package and project manager.",
+        presets: ["minimal", "agent"],
+        deps: { mac: [], win: [] },
+        mac: () => ["install_uv"],
+        win: () => ["Install-Uv"]
+      },
+      {
+        id: "bun",
+        group: "Core",
+        label: "Bun",
+        note: "Optional JavaScript runtime and package manager.",
+        presets: [],
+        deps: { mac: [], win: [] },
+        mac: () => ["install_bun"],
+        win: () => ["Install-Bun"]
+      },
+      {
+        id: "vscode",
+        group: "Editor",
+        label: "VS Code",
+        note: "Editor and code command.",
+        presets: ["agent"],
+        deps: { mac: ["homebrew"], win: [] },
+        mac: () => ['brew_cask "VS Code" "visual-studio-code" "Visual Studio Code.app" "code"'],
+        win: () => ["Install-VSCode"]
+      },
+      {
+        id: "claude-desktop",
+        group: "AI tools",
+        label: "Claude Desktop",
+        note: "Desktop app.",
+        presets: ["agent"],
+        deps: { mac: ["homebrew"], win: [] },
+        mac: () => ['brew_cask "Claude Desktop" "claude" "Claude.app" ""'],
+        win: () => ["Install-ClaudeDesktop"]
+      },
+      {
+        id: "claude-code",
+        group: "AI tools",
+        label: "Claude Code CLI",
+        note: "Native installer first, npm fallback when available.",
+        presets: ["agent"],
+        deps: { mac: ["homebrew"], win: [] },
+        mac: () => ["install_claude_code"],
+        win: () => ["Install-ClaudeCode"]
+      },
+      {
+        id: "claude-extension",
+        group: "AI tools",
+        label: "Claude Code VS Code extension",
+        note: "Installs anthropic.claude-code.",
+        presets: ["agent"],
+        deps: { mac: ["vscode"], win: ["vscode"] },
+        mac: () => ['install_vscode_extension "anthropic.claude-code" "Claude Code VS Code extension"'],
+        win: () => ["Install-CodeExtension -ExtensionId 'anthropic.claude-code' -Label 'Claude Code VS Code extension'"]
+      },
+      {
+        id: "codex",
+        group: "AI tools",
+        label: "Codex CLI",
+        note: "Installs @openai/codex with npm.",
+        presets: [],
+        deps: { mac: ["node"], win: ["node"] },
+        mac: () => ['npm_global "Codex CLI" "@openai/codex" "codex"'],
+        win: () => ["Install-NpmGlobal -Label 'Codex CLI' -Package '@openai/codex' -Command 'codex'"]
+      },
+      {
+        id: "vercel",
+        group: "Web deploy",
+        label: "Vercel CLI",
+        note: "Installs vercel with npm.",
+        presets: [],
+        deps: { mac: ["node"], win: ["node"] },
+        mac: () => ['npm_global "Vercel CLI" "vercel" "vercel"'],
+        win: () => ["Install-NpmGlobal -Label 'Vercel CLI' -Package 'vercel' -Command 'vercel'"]
+      },
+      {
+        id: "gh",
+        group: "Source control",
+        label: "GitHub CLI",
+        note: "gh command.",
+        presets: ["agent"],
+        deps: { mac: ["homebrew"], win: [] },
+        mac: () => ['brew_formula "GitHub CLI" "gh" "gh"'],
+        win: () => ["Install-Winget -Label 'GitHub CLI' -PackageId 'GitHub.cli' -Command 'gh'"]
+      },
+      {
+        id: "glab",
+        group: "Source control",
+        label: "GitLab CLI",
+        note: "glab command.",
+        presets: [],
+        deps: { mac: ["homebrew"], win: [] },
+        mac: () => ['brew_formula "GitLab CLI" "glab" "glab"'],
+        win: () => ["Install-Winget -Label 'GitLab CLI' -PackageId 'glab.glab' -Command 'glab'"]
+      },
+      {
+        id: "git-config",
+        group: "Source control",
+        label: "Git identity defaults",
+        note: "Writes name and email only when both are missing.",
+        presets: [],
+        deps: { mac: ["git"], win: ["git"] },
+        mac: (settings) => [
+          `configure_git ${sh(settings.gitName)} ${sh(settings.gitEmail)}`
+        ],
+        win: (settings) => [
+          `Set-GitDefaults -Name ${ps(settings.gitName)} -Email ${ps(settings.gitEmail)}`
+        ]
+      }
+    ];
+
+    const SYSTEM_LABELS = {
+      homebrew: "Homebrew"
+    };
+
+    const state = {
+      os: "mac",
+      selected: new Set(PACKAGES.filter((item) => item.presets.includes("agent")).map((item) => item.id))
+    };
+
+    const packageById = new Map(PACKAGES.map((item) => [item.id, item]));
+
+    function sh(value) {
+      return `'${String(value).replace(/'/g, `'\\''`)}'`;
+    }
+
+    function ps(value) {
+      return `'${String(value).replace(/'/g, "''")}'`;
+    }
+
+    function fileName(os) {
+      return os === "mac" ? "setup-mac.command" : "setup-windows.bat";
+    }
+
+    function getSettings() {
+      return {
+        gitName: document.getElementById("gitName").value || "Claude Code",
+        gitEmail: document.getElementById("gitEmail").value || "noreply@anthropic.com"
+      };
+    }
+
+    function resolveSelection(ids, os) {
+      const resolved = new Set(ids);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const id of [...resolved]) {
+          const item = packageById.get(id);
+          if (!item) {
+            continue;
+          }
+          for (const dep of item.deps[os] || []) {
+            if (!resolved.has(dep)) {
+              resolved.add(dep);
+              changed = true;
+            }
+          }
+        }
+      }
+      return resolved;
+    }
+
+    function visibleResolved(resolved) {
+      return [...resolved].filter((id) => packageById.has(id));
+    }
+
+    function autoAdded(original, resolved) {
+      return [...resolved].filter((id) => !original.has(id)).map((id) => {
+        const item = packageById.get(id);
+        return item ? item.label : SYSTEM_LABELS[id] || id;
+      });
+    }
+
+    function buildMacScript(resolved, settings) {
+      const body = [];
+      if (resolved.has("homebrew")) {
+        body.push("install_homebrew");
+      }
+      for (const id of visibleResolved(resolved)) {
+        const item = packageById.get(id);
+        if (item.mac) {
+          body.push(...item.mac(settings));
+        }
+      }
+      return [
+        "#!/bin/bash",
+        "set -u",
+        "set -o pipefail",
+        "",
+        'LOG="${TMPDIR:-/tmp}/dev-setup-builder-$(date +%Y%m%d-%H%M%S).log"',
+        ': > "$LOG"',
+        "FAILED_ITEMS=()",
+        "",
+        'has() { command -v "$1" >/dev/null 2>&1; }',
+        'info() { printf "\\n[%s]\\n" "$1"; }',
+        'ok() { printf "  OK: %s\\n" "$1"; }',
+        'warn() { printf "  WARN: %s\\n" "$1"; }',
+        'fail() { printf "  FAIL: %s\\n" "$1"; FAILED_ITEMS+=("$1"); }',
+        "",
+        "path_prepend() {",
+        '  [ -d "$1" ] || return 0',
+        '  case ":${PATH:-}:" in *":$1:"*) ;; *) export PATH="$1:${PATH:-}" ;; esac',
+        "}",
+        "",
+        "refresh_path() {",
+        "  if [ -x /opt/homebrew/bin/brew ]; then",
+        '    eval "$(/opt/homebrew/bin/brew shellenv)"',
+        "  elif [ -x /usr/local/bin/brew ]; then",
+        '    eval "$(/usr/local/bin/brew shellenv)"',
+        "  elif has brew; then",
+        '    eval "$(brew shellenv)"',
+        "  fi",
+        '  path_prepend "$HOME/.bun/bin"',
+        '  path_prepend "$HOME/.local/bin"',
+        '  path_prepend "/Applications/Visual Studio Code.app/Contents/Resources/app/bin"',
+        '  path_prepend "$HOME/Applications/Visual Studio Code.app/Contents/Resources/app/bin"',
+        "  if has npm; then",
+        '    prefix="$(npm prefix -g 2>/dev/null || true)"',
+        '    [ -n "$prefix" ] && path_prepend "$prefix/bin"',
+        "  fi",
+        "}",
+        "",
+        "append_once() {",
+        '  file="$1"; marker="$2"; shift 2',
+        '  mkdir -p "$(dirname "$file")"; touch "$file"',
+        '  grep -Fq "$marker" "$file" 2>/dev/null && return 0',
+        '  { printf "\\n%s\\n" "$marker"; for line in "$@"; do printf "%s\\n" "$line"; done; } >> "$file"',
+        "}",
+        "",
+        "install_homebrew() {",
+        '  info "Homebrew"',
+        "  if has brew; then ok \"Homebrew installed\"; refresh_path; return 0; fi",
+        `  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" >> "$LOG" 2>&1 || { fail "Homebrew"; return 1; }`,
+        "  refresh_path",
+        '  if has brew; then ok "Homebrew installed"; else fail "Homebrew"; fi',
+        "}",
+        "",
+        "brew_formula() {",
+        '  label="$1"; formula="$2"; command_name="$3"',
+        '  info "$label"',
+        '  if has "$command_name"; then ok "$label installed"; return 0; fi',
+        '  if ! has brew; then fail "$label (Homebrew missing)"; return 1; fi',
+        '  brew install "$formula" >> "$LOG" 2>&1',
+        "  refresh_path",
+        '  if has "$command_name"; then ok "$label installed"; else fail "$label"; fi',
+        "}",
+        "",
+        "app_exists() {",
+        '  [ -n "$1" ] && { [ -d "/Applications/$1" ] || [ -d "$HOME/Applications/$1" ]; }',
+        "}",
+        "",
+        "brew_cask() {",
+        '  label="$1"; cask="$2"; app_name="$3"; command_name="$4"',
+        '  info "$label"',
+        '  [ -n "$command_name" ] && has "$command_name" && { ok "$label installed"; return 0; }',
+        '  app_exists "$app_name" && { ok "$label installed"; return 0; }',
+        '  if ! has brew; then fail "$label (Homebrew missing)"; return 1; fi',
+        '  brew install --cask "$cask" >> "$LOG" 2>&1',
+        "  refresh_path",
+        '  if { [ -n "$command_name" ] && has "$command_name"; } || app_exists "$app_name"; then ok "$label installed"; else fail "$label"; fi',
+        "}",
+        "",
+        "npm_global() {",
+        '  label="$1"; package_name="$2"; command_name="$3"',
+        '  info "$label"',
+        '  if has "$command_name"; then ok "$label installed"; return 0; fi',
+        '  if ! has npm; then fail "$label (npm missing)"; return 1; fi',
+        '  npm install -g "$package_name" >> "$LOG" 2>&1',
+        "  refresh_path",
+        '  if has "$command_name"; then ok "$label installed"; else fail "$label"; fi',
+        "}",
+        "",
+        "install_bun() {",
+        '  info "Bun"',
+        '  if has bun || [ -x "$HOME/.bun/bin/bun" ]; then path_prepend "$HOME/.bun/bin"; ok "Bun installed"; return 0; fi',
+        '  curl -fsSL https://bun.sh/install | bash >> "$LOG" 2>&1',
+        '  path_prepend "$HOME/.bun/bin"',
+        '  append_once "$HOME/.zprofile" "# Dev Setup Builder - Bun PATH" \'export BUN_INSTALL="$HOME/.bun"\' \'export PATH="$BUN_INSTALL/bin:$PATH"\'',
+        '  if has bun || [ -x "$HOME/.bun/bin/bun" ]; then ok "Bun installed"; else fail "Bun"; fi',
+        "}",
+        "",
+        "install_uv() {",
+        '  info "uv"',
+        '  if has uv || [ -x "$HOME/.local/bin/uv" ]; then path_prepend "$HOME/.local/bin"; ok "uv installed"; return 0; fi',
+        '  curl -LsSf https://astral.sh/uv/install.sh | sh >> "$LOG" 2>&1',
+        '  path_prepend "$HOME/.local/bin"',
+        '  append_once "$HOME/.zprofile" "# Dev Setup Builder - uv PATH" \'export PATH="$HOME/.local/bin:$PATH"\'',
+        '  if has uv || [ -x "$HOME/.local/bin/uv" ]; then ok "uv installed"; else fail "uv"; fi',
+        "}",
+        "",
+        "install_claude_code() {",
+        '  info "Claude Code CLI"',
+        '  if has claude; then ok "Claude Code CLI installed"; return 0; fi',
+        '  if has brew; then brew install --cask claude-code >> "$LOG" 2>&1; refresh_path; fi',
+        '  if has claude; then ok "Claude Code CLI installed"; return 0; fi',
+        '  if has npm; then npm_global "Claude Code CLI" "@anthropic-ai/claude-code" "claude"; else fail "Claude Code CLI"; fi',
+        "}",
+        "",
+        "install_vscode_extension() {",
+        '  extension_id="$1"; label="$2"',
+        '  info "$label"',
+        '  if ! has code; then fail "$label (code command missing)"; return 1; fi',
+        '  if code --list-extensions 2>/dev/null | grep -qi "^${extension_id}$"; then ok "$label installed"; return 0; fi',
+        '  code --install-extension "$extension_id" --force >> "$LOG" 2>&1',
+        '  if code --list-extensions 2>/dev/null | grep -qi "^${extension_id}$"; then ok "$label installed"; else fail "$label"; fi',
+        "}",
+        "",
+        "configure_git() {",
+        '  name="$1"; email="$2"',
+        '  info "Git identity defaults"',
+        '  if ! has git; then fail "Git identity defaults (git missing)"; return 1; fi',
+        '  existing_name="$(git config --global user.name 2>/dev/null || true)"',
+        '  existing_email="$(git config --global user.email 2>/dev/null || true)"',
+        '  if [ -n "$existing_name" ] && [ -n "$existing_email" ]; then ok "Git identity already set"; return 0; fi',
+        '  git config --global user.name "$name" >> "$LOG" 2>&1',
+        '  git config --global user.email "$email" >> "$LOG" 2>&1',
+        '  ok "Git identity defaults set"',
+        "}",
+        "",
+        "refresh_path",
+        "",
+        ...body,
+        "",
+        'printf "\\nLog: %s\\n" "$LOG"',
+        'if [ "${#FAILED_ITEMS[@]}" -gt 0 ]; then',
+        '  printf "Failed items:\\n"',
+        '  printf "  - %s\\n" "${FAILED_ITEMS[@]}"',
+        "  exit 1",
+        "fi",
+        'printf "Done. Open a new terminal before using newly installed commands.\\n"'
+      ].join("\n");
+    }
+
+    function buildWindowsScript(resolved, settings) {
+      const body = [];
+      for (const id of visibleResolved(resolved)) {
+        const item = packageById.get(id);
+        if (item.win) {
+          body.push(...item.win(settings));
+        }
+      }
+      return [
+        "@echo off",
+        "setlocal",
+        "set \"BAT_FILE=%~f0\"",
+        "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$raw=[IO.File]::ReadAllText($env:BAT_FILE,[Text.UTF8Encoding]::new($false)); $m='#__PS_SCRIPT_BELOW__'; $i=$raw.LastIndexOf($m); if($i -lt 0){ Write-Host 'ERROR: PS marker not found'; exit 1 }; $ps=$raw.Substring($i+$m.Length); $sb=[scriptblock]::Create($ps); & $sb; exit $LASTEXITCODE\"",
+        "set \"EC=%ERRORLEVEL%\"",
+        "pause",
+        "exit /b %EC%",
+        "",
+        "#__PS_SCRIPT_BELOW__",
+        "$ErrorActionPreference = 'Continue'",
+        "$ProgressPreference = 'SilentlyContinue'",
+        "try { chcp 65001 > $null } catch {}",
+        "try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); $OutputEncoding = [Text.UTF8Encoding]::new($false) } catch {}",
+        "$LogFile = Join-Path $env:TEMP (\"dev-setup-builder-{0}.log\" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))",
+        "[IO.File]::WriteAllText($LogFile, \"=== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===`r`n\", [Text.UTF8Encoding]::new($false))",
+        "$Failed = @()",
+        "",
+        "function Ok([string]$Text) { Write-Host \"  OK: $Text\" }",
+        "function Warn([string]$Text) { Write-Host \"  WARN: $Text\" }",
+        "function Fail([string]$Text) { Write-Host \"  FAIL: $Text\"; $script:Failed += $Text }",
+        "function Step([string]$Text) { Write-Host \"\"; Write-Host \"[$Text]\" }",
+        "function Has-Command([string]$Name) { return [bool](Get-Command $Name -ErrorAction SilentlyContinue) }",
+        "",
+        "function Refresh-Path {",
+        "  $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')",
+        "  $user = [Environment]::GetEnvironmentVariable('Path', 'User')",
+        "  $env:Path = \"$machine;$user\"",
+        "  foreach ($p in @(",
+        "    'C:\\Program Files\\Git\\cmd',",
+        "    'C:\\Program Files\\Git\\bin',",
+        "    'C:\\Program Files\\nodejs',",
+        "    (Join-Path $env:APPDATA 'npm'),",
+        "    (Join-Path $env:USERPROFILE '.bun\\bin'),",
+        "    (Join-Path $env:USERPROFILE '.local\\bin'),",
+        "    (Join-Path $env:LOCALAPPDATA 'Microsoft\\WinGet\\Links'),",
+        "    (Join-Path $env:LOCALAPPDATA 'Programs\\Microsoft VS Code\\bin')",
+        "  )) {",
+        "    if ($p -and (Test-Path $p) -and ($env:Path -notlike \"*$p*\")) { $env:Path = \"$p;$env:Path\" }",
+        "  }",
+        "}",
+        "",
+        "function Install-Winget {",
+        "  param([string]$Label, [string]$PackageId, [string]$Command, [string[]]$ExtraArgs = @())",
+        "  Step $Label",
+        "  if ($Command -and (Has-Command $Command)) { Ok \"$Label installed\"; return }",
+        "  if (-not (Has-Command 'winget')) { Fail \"$Label (winget missing)\"; return }",
+        "  $args = @('install','--id',$PackageId,'--exact','--source','winget','--accept-source-agreements','--accept-package-agreements','--silent','--disable-interactivity') + $ExtraArgs",
+        "  & winget @args *>> $LogFile",
+        "  $exitCode = $LASTEXITCODE",
+        "  Refresh-Path",
+        "  if ($Command) {",
+        "    if (Has-Command $Command) { Ok \"$Label installed\" } else { Fail $Label }",
+        "  } elseif ($exitCode -eq 0) {",
+        "    Ok \"$Label installer completed\"",
+        "  } else {",
+        "    Fail $Label",
+        "  }",
+        "}",
+        "",
+        "function Install-NpmGlobal {",
+        "  param([string]$Label, [string]$Package, [string]$Command)",
+        "  Step $Label",
+        "  if (Has-Command $Command) { Ok \"$Label installed\"; return }",
+        "  if (-not (Has-Command 'npm')) { Fail \"$Label (npm missing)\"; return }",
+        "  & npm install -g $Package *>> $LogFile",
+        "  Refresh-Path",
+        "  if (Has-Command $Command) { Ok \"$Label installed\" } else { Fail $Label }",
+        "}",
+        "",
+        "function Install-Bun {",
+        "  Step 'Bun'",
+        "  $bunPath = Join-Path $env:USERPROFILE '.bun\\bin\\bun.exe'",
+        "  if ((Has-Command 'bun') -or (Test-Path $bunPath)) { Ok 'Bun installed'; return }",
+        "  $installer = Join-Path $env:TEMP 'bun-install.ps1'",
+        "  try { Invoke-RestMethod https://bun.sh/install.ps1 -UseBasicParsing -OutFile $installer; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer *>> $LogFile } catch { $_ | Out-String | Add-Content -Path $LogFile }",
+        "  Refresh-Path",
+        "  if ((Has-Command 'bun') -or (Test-Path $bunPath)) { Ok 'Bun installed' } else { Fail 'Bun' }",
+        "}",
+        "",
+        "function Install-Uv {",
+        "  Step 'uv'",
+        "  $uvPath = Join-Path $env:USERPROFILE '.local\\bin\\uv.exe'",
+        "  if ((Has-Command 'uv') -or (Test-Path $uvPath)) { Ok 'uv installed'; return }",
+        "  $installer = Join-Path $env:TEMP 'uv-install.ps1'",
+        "  try { Invoke-RestMethod https://astral.sh/uv/install.ps1 -UseBasicParsing -OutFile $installer; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer *>> $LogFile } catch { $_ | Out-String | Add-Content -Path $LogFile }",
+        "  Refresh-Path",
+        "  if ((Has-Command 'uv') -or (Test-Path $uvPath)) { Ok 'uv installed' } else { Fail 'uv' }",
+        "}",
+        "",
+        "function Find-Code {",
+        "  $cmd = Get-Command code -ErrorAction SilentlyContinue",
+        "  if ($cmd) { return $cmd.Source }",
+        "  foreach ($p in @(",
+        "    (Join-Path $env:LOCALAPPDATA 'Programs\\Microsoft VS Code\\bin\\code.cmd'),",
+        "    (Join-Path $env:ProgramFiles 'Microsoft VS Code\\bin\\code.cmd')",
+        "  )) { if ($p -and (Test-Path $p)) { return $p } }",
+        "  return $null",
+        "}",
+        "",
+        "$script:vscodeCmd = $null",
+        "function Install-VSCode {",
+        "  Step 'VS Code'",
+        "  $script:vscodeCmd = Find-Code",
+        "  if ($script:vscodeCmd) { Ok 'VS Code installed'; return }",
+        "  Install-Winget -Label 'VS Code' -PackageId 'Microsoft.VisualStudioCode' -Command 'code' -ExtraArgs @('--scope','user')",
+        "  $script:vscodeCmd = Find-Code",
+        "  if (-not $script:vscodeCmd) { Fail 'VS Code command' }",
+        "}",
+        "",
+        "function Test-ClaudeDesktop {",
+        "  foreach ($p in @(",
+        "    (Join-Path $env:LOCALAPPDATA 'AnthropicClaude\\claude.exe'),",
+        "    (Join-Path $env:LOCALAPPDATA 'Programs\\claude-desktop\\Claude.exe'),",
+        "    (Join-Path $env:ProgramFiles 'Claude\\Claude.exe')",
+        "  )) { if ($p -and (Test-Path $p)) { return $true } }",
+        "  try { if (Get-AppxPackage -Name 'Claude' -ErrorAction SilentlyContinue) { return $true } } catch {}",
+        "  return $false",
+        "}",
+        "",
+        "function Install-ClaudeDesktop {",
+        "  Step 'Claude Desktop'",
+        "  if (Test-ClaudeDesktop) { Ok 'Claude Desktop installed'; return }",
+        "  Install-Winget -Label 'Claude Desktop' -PackageId 'Anthropic.Claude' -Command '' -ExtraArgs @('--scope','user')",
+        "  if (-not (Test-ClaudeDesktop)) { Warn 'Claude Desktop may require a new terminal or manual install' }",
+        "}",
+        "",
+        "function Install-ClaudeCode {",
+        "  Step 'Claude Code CLI'",
+        "  if (Has-Command 'claude') { Ok 'Claude Code CLI installed'; return }",
+        "  if (Has-Command 'winget') { & winget install --id Anthropic.ClaudeCode --exact --source winget --accept-source-agreements --accept-package-agreements --silent --disable-interactivity *>> $LogFile; Refresh-Path }",
+        "  if (Has-Command 'claude') { Ok 'Claude Code CLI installed'; return }",
+        "  if (Has-Command 'npm') { Install-NpmGlobal -Label 'Claude Code CLI' -Package '@anthropic-ai/claude-code' -Command 'claude' } else { Fail 'Claude Code CLI' }",
+        "}",
+        "",
+        "function Install-CodeExtension {",
+        "  param([string]$ExtensionId, [string]$Label)",
+        "  Step $Label",
+        "  if (-not $script:vscodeCmd) { $script:vscodeCmd = Find-Code }",
+        "  if (-not $script:vscodeCmd) { Fail \"$Label (VS Code missing)\"; return }",
+        "  $extensions = & $script:vscodeCmd --list-extensions 2>$null",
+        "  if ($extensions -match [regex]::Escape($ExtensionId)) { Ok \"$Label installed\"; return }",
+        "  & $script:vscodeCmd --install-extension $ExtensionId --force *>> $LogFile",
+        "  $extensions = & $script:vscodeCmd --list-extensions 2>$null",
+        "  if ($extensions -match [regex]::Escape($ExtensionId)) { Ok \"$Label installed\" } else { Fail $Label }",
+        "}",
+        "",
+        "function Set-GitDefaults {",
+        "  param([string]$Name, [string]$Email)",
+        "  Step 'Git identity defaults'",
+        "  if (-not (Has-Command 'git')) { Fail 'Git identity defaults (git missing)'; return }",
+        "  $existingName = & git config --global user.name 2>$null",
+        "  $existingEmail = & git config --global user.email 2>$null",
+        "  if ($existingName -and $existingEmail) { Ok 'Git identity already set'; return }",
+        "  & git config --global user.name $Name *>> $LogFile",
+        "  & git config --global user.email $Email *>> $LogFile",
+        "  Ok 'Git identity defaults set'",
+        "}",
+        "",
+        "Refresh-Path",
+        "",
+        ...body,
+        "",
+        "Write-Host \"\"",
+        "Write-Host \"Log: $LogFile\"",
+        "if ($Failed.Count -gt 0) {",
+        "  Write-Host 'Failed items:'",
+        "  foreach ($item in $Failed) { Write-Host \"  - $item\" }",
+        "  exit 1",
+        "}",
+        "Write-Host 'Done. Open a new terminal before using newly installed commands.'",
+        "exit 0"
+      ].join("\r\n");
+    }
+
+    function buildScript() {
+      const resolved = resolveSelection(state.selected, state.os);
+      const settings = getSettings();
+      return state.os === "mac" ? buildMacScript(resolved, settings) : buildWindowsScript(resolved, settings);
+    }
+
+    function renderPackages() {
+      const root = document.getElementById("packageList");
+      const groups = [...new Set(PACKAGES.map((item) => item.group))];
+      root.innerHTML = groups.map((group) => {
+        const items = PACKAGES.filter((item) => item.group === group).map((item) => `
+          <label class="package">
+            <input type="checkbox" data-package="${item.id}" ${state.selected.has(item.id) ? "checked" : ""}>
+            <span>
+              <strong>${item.label}</strong>
+              <span>${item.note}</span>
+            </span>
+          </label>
+        `).join("");
+        return `<div class="group"><h3>${group}</h3>${items}</div>`;
+      }).join("");
+
+      root.querySelectorAll("[data-package]").forEach((input) => {
+        input.addEventListener("change", (event) => {
+          const id = event.currentTarget.dataset.package;
+          if (event.currentTarget.checked) {
+            state.selected.add(id);
+          } else {
+            state.selected.delete(id);
+          }
+          update();
+        });
+      });
+    }
+
+    function update() {
+      const resolved = resolveSelection(state.selected, state.os);
+      const script = buildScript();
+      const added = autoAdded(state.selected, resolved);
+      const file = fileName(state.os);
+      const preview = document.getElementById("scriptPreview");
+      preview.value = script;
+      document.getElementById("previewTitle").textContent = file;
+      document.getElementById("metaLine").innerHTML = [
+        `<span class="pill">${visibleResolved(resolved).length} tools</span>`,
+        `<span class="pill">${script.split(/\r?\n/).length} lines</span>`
+      ].join("");
+      document.getElementById("dependencyText").textContent = added.length ? `Auto-added: ${added.join(", ")}` : "";
+      document.getElementById("statusText").innerHTML = state.selected.size ? "Ready" : "<span class='warning'>No tools selected</span>";
+      renderPackages();
+    }
+
+    function setPreset(name) {
+      if (name === "clear") {
+        state.selected = new Set();
+      } else {
+        state.selected = new Set(PACKAGES.filter((item) => item.presets.includes(name)).map((item) => item.id));
+      }
+      update();
+    }
+
+    function downloadScript() {
+      const script = buildScript();
+      const blob = new Blob([script], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName(state.os);
+      a.click();
+      URL.revokeObjectURL(url);
+      document.getElementById("statusText").textContent = `Downloaded ${a.download}`;
+    }
+
+    async function copyScript() {
+      const text = buildScript();
+      await navigator.clipboard.writeText(text);
+      document.getElementById("statusText").textContent = "Copied script";
+    }
+
+    function selfTest() {
+      const selected = new Set(["codex", "claude-extension"]);
+      const mac = resolveSelection(selected, "mac");
+      const win = resolveSelection(selected, "win");
+      const macScript = buildMacScript(mac, { gitName: "A", gitEmail: "a@example.com" });
+      const winScript = buildWindowsScript(win, { gitName: "A", gitEmail: "a@example.com" });
+      const checks = [
+        mac.has("node"),
+        mac.has("vscode"),
+        mac.has("homebrew"),
+        win.has("node"),
+        win.has("vscode"),
+        macScript.includes("@openai/codex"),
+        macScript.includes("anthropic.claude-code"),
+        winScript.includes("@openai/codex"),
+        winScript.includes("anthropic.claude-code")
+      ];
+      return { ok: checks.every(Boolean), checks };
+    }
+
+    function init() {
+      document.querySelectorAll("input[name='os']").forEach((input) => {
+        input.addEventListener("change", (event) => {
+          state.os = event.currentTarget.value;
+          update();
+        });
+      });
+      document.querySelectorAll("[data-preset]").forEach((button) => {
+        button.addEventListener("click", () => setPreset(button.dataset.preset));
+      });
+      document.getElementById("gitName").addEventListener("input", update);
+      document.getElementById("gitEmail").addEventListener("input", update);
+      document.getElementById("downloadScript").addEventListener("click", downloadScript);
+      document.getElementById("copyScript").addEventListener("click", () => {
+        copyScript().catch(() => {
+          document.getElementById("statusText").textContent = "Copy failed";
+        });
+      });
+
+      if (new URLSearchParams(location.search).has("selftest")) {
+        const result = selfTest();
+        document.body.dataset.selftest = result.ok ? "pass" : "fail";
+        if (!result.ok) {
+          console.error("Self-test failed", result);
+        }
+      }
+      update();
+    }
+
+    window.DevSetupBuilder = {
+      buildMacScript,
+      buildWindowsScript,
+      resolveSelection,
+      selfTest
+    };
+
+    document.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>
