@@ -1,4 +1,4 @@
-const PACKAGES = [
+export const PACKAGES = [
   {
     id: "git",
     group: "Core",
@@ -117,6 +117,16 @@ const PACKAGES = [
     win: () => ["Install-ClaudeCode"]
   },
   {
+    id: "claude-code-telemetry",
+    group: "AI tools",
+    label: "Claude Code CLI telemetry",
+    note: "Enables Claude Code OpenTelemetry metrics and logs with redacted prompt text.",
+    presets: [],
+    deps: { mac: ["claude-code"], win: ["claude-code"] },
+    mac: (settings) => [`configure_claude_code_telemetry ${telemetryArgs(settings)}`],
+    win: (settings) => [`Set-ClaudeCodeTelemetry ${telemetryArgs(settings, ps)}`]
+  },
+  {
     id: "claude-extension",
     group: "AI tools",
     label: "Claude Code VS Code extension",
@@ -135,6 +145,16 @@ const PACKAGES = [
     deps: { mac: ["node"], win: ["node"] },
     mac: () => ['npm_global "Codex CLI" "@openai/codex" "codex"'],
     win: () => ["Install-NpmGlobal -Label 'Codex CLI' -Package '@openai/codex' -Command 'codex'"]
+  },
+  {
+    id: "codex-telemetry",
+    group: "AI tools",
+    label: "Codex CLI telemetry",
+    note: "Writes Codex OpenTelemetry log export config with redacted prompt text.",
+    presets: [],
+    deps: { mac: ["codex"], win: ["codex"] },
+    mac: (settings) => [`configure_codex_telemetry ${telemetryArgs(settings)}`],
+    win: (settings) => [`Set-CodexTelemetry ${telemetryArgs(settings, ps)}`]
   },
   {
     id: "vercel",
@@ -196,12 +216,32 @@ const SYSTEM_LABELS = {
   homebrew: "Homebrew"
 };
 
-const state = {
-  os: "mac",
-  selected: new Set(PACKAGES.filter((item) => item.presets.includes("agent")).map((item) => item.id))
-};
-
 const packageById = new Map(PACKAGES.map((item) => [item.id, item]));
+const DEFAULT_OTEL_ENDPOINT = "http://localhost:4317";
+
+const TELEMETRY_SETTING_KEYS = [
+  ["otelEndpoint", DEFAULT_OTEL_ENDPOINT],
+  ["otelProtocol", "grpc"],
+  ["otelHeaderName", ""],
+  ["otelHeaderValue", ""],
+  ["otelEnvironment", "dev"],
+  ["otelResourceAttributes", ""],
+  ["otelMetricInterval", "60000"],
+  ["otelLogsInterval", "5000"],
+  ["claudeMetricsExporter", "otlp"],
+  ["claudeLogsExporter", "otlp"],
+  ["claudeTracesExporter", "none"],
+  ["claudeLogUserPrompts", false],
+  ["claudeLogAssistantResponses", false],
+  ["claudeLogToolDetails", false],
+  ["claudeLogToolContent", false],
+  ["claudeRawApiBodiesMode", "off"],
+  ["claudeRawApiBodiesDir", ""],
+  ["codexLogExporter", "otlp"],
+  ["codexTraceExporter", "none"],
+  ["codexMetricsExporter", "none"],
+  ["codexLogUserPrompt", false]
+];
 
 function sh(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
@@ -211,22 +251,31 @@ function ps(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
 }
 
-function fileName(os) {
+function boolSetting(settings, key) {
+  return settings?.[key] ? "1" : "0";
+}
+
+function setting(settings, key, fallback) {
+  const value = settings?.[key];
+  return value === undefined || value === null || value === "" ? fallback : value;
+}
+
+function telemetryArgs(settings, quote = sh) {
+  return TELEMETRY_SETTING_KEYS.map(([key, fallback]) => {
+    const value = typeof fallback === "boolean" ? boolSetting(settings, key) : setting(settings, key, fallback);
+    return quote(value);
+  }).join(" ");
+}
+
+export function fileName(os) {
   return os === "mac" ? "setup-mac.command" : "setup-windows.bat";
 }
 
-function supportsOs(item, os) {
+export function supportsOs(item, os) {
   return !item.platforms || item.platforms.includes(os);
 }
 
-function getSettings() {
-  return {
-    gitName: document.getElementById("gitName").value || "Claude Code",
-    gitEmail: document.getElementById("gitEmail").value || "noreply@anthropic.com"
-  };
-}
-
-function resolveSelection(ids, os) {
+export function resolveSelection(ids, os) {
   const resolved = new Set([...ids].filter((id) => {
     const item = packageById.get(id);
     return !item || supportsOs(item, os);
@@ -250,18 +299,18 @@ function resolveSelection(ids, os) {
   return resolved;
 }
 
-function visibleResolved(resolved) {
+export function visibleResolved(resolved) {
   return PACKAGES.filter((item) => resolved.has(item.id)).map((item) => item.id);
 }
 
-function autoAdded(original, resolved) {
+export function autoAdded(original, resolved) {
   return [...resolved].filter((id) => !original.has(id)).map((id) => {
     const item = packageById.get(id);
     return item ? item.label : SYSTEM_LABELS[id] || id;
   });
 }
 
-function buildMacScript(resolved, settings) {
+export function buildMacScript(resolved, settings) {
   const body = [];
   if (resolved.has("homebrew")) {
     body.push("install_homebrew");
@@ -399,6 +448,93 @@ function buildMacScript(resolved, settings) {
     '  if has npm; then npm_global "Claude Code CLI" "@anthropic-ai/claude-code" "claude"; else fail "Claude Code CLI"; fi',
     "}",
     "",
+    "configure_claude_code_telemetry() {",
+    '  endpoint="$1"; protocol="$2"; header_name="$3"; header_value="$4"; environment="$5"; resource_attrs="$6"',
+    '  metric_interval="$7"; logs_interval="$8"; metrics_exporter="$9"; logs_exporter="${10}"; traces_exporter="${11}"',
+    '  log_prompts="${12}"; log_assistant="${13}"; log_tool_details="${14}"; log_tool_content="${15}"; raw_mode="${16}"; raw_dir="${17}"',
+    '  info "Claude Code CLI telemetry"',
+    '  telemetry_file="$HOME/.config/dev-setup-builder/claude-code-telemetry.sh"',
+    '  mkdir -p "$(dirname "$telemetry_file")"',
+    '  combined_attrs="deployment.environment=$environment"',
+    '  [ -n "$resource_attrs" ] && combined_attrs="$combined_attrs,$resource_attrs"',
+    "  {",
+    '    printf "%s\\n" "# Generated by Dev Setup Builder."',
+    '    printf "%s\\n" "export CLAUDE_CODE_ENABLE_TELEMETRY=1"',
+    '    printf "export OTEL_METRICS_EXPORTER=%s\\n" "$(shell_escape "$metrics_exporter")"',
+    '    printf "export OTEL_LOGS_EXPORTER=%s\\n" "$(shell_escape "$logs_exporter")"',
+    '    printf "export OTEL_EXPORTER_OTLP_PROTOCOL=%s\\n" "$(shell_escape "$protocol")"',
+    '    printf "export OTEL_EXPORTER_OTLP_ENDPOINT=%s\\n" "$(shell_escape "$endpoint")"',
+    '    printf "export OTEL_RESOURCE_ATTRIBUTES=%s\\n" "$(shell_escape "$combined_attrs")"',
+    '    printf "export OTEL_METRIC_EXPORT_INTERVAL=%s\\n" "$(shell_escape "$metric_interval")"',
+    '    printf "export OTEL_LOGS_EXPORT_INTERVAL=%s\\n" "$(shell_escape "$logs_interval")"',
+    '    printf "export OTEL_LOG_USER_PROMPTS=%s\\n" "$(shell_escape "$log_prompts")"',
+    '    printf "export OTEL_LOG_ASSISTANT_RESPONSES=%s\\n" "$(shell_escape "$log_assistant")"',
+    '    printf "export OTEL_LOG_TOOL_DETAILS=%s\\n" "$(shell_escape "$log_tool_details")"',
+    '    printf "export OTEL_LOG_TOOL_CONTENT=%s\\n" "$(shell_escape "$log_tool_content")"',
+    '    [ "$traces_exporter" != "none" ] && printf "%s\\n" "export CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1"',
+    '    printf "export OTEL_TRACES_EXPORTER=%s\\n" "$(shell_escape "$traces_exporter")"',
+    '    [ -n "$header_name" ] && [ -n "$header_value" ] && printf "export OTEL_EXPORTER_OTLP_HEADERS=%s\\n" "$(shell_escape "$header_name=$header_value")"',
+    '    [ "$raw_mode" = "inline" ] && printf "%s\\n" "export OTEL_LOG_RAW_API_BODIES=1"',
+    '    [ "$raw_mode" = "file" ] && [ -n "$raw_dir" ] && printf "export OTEL_LOG_RAW_API_BODIES=%s\\n" "$(shell_escape "file:$raw_dir")"',
+    '  } > "$telemetry_file"',
+    '  append_once "$HOME/.zprofile" "# Dev Setup Builder - Claude Code telemetry" "source \\"$telemetry_file\\""',
+    '  ok "Claude Code telemetry configured"',
+    "}",
+    "",
+    "shell_escape() {",
+    '  printf "%q" "$1"',
+    "}",
+    "",
+    "toml_escape() {",
+    '  printf "%s" "$1" | sed \'s/\\\\/\\\\\\\\/g; s/"/\\\\"/g\'',
+    "}",
+    "",
+    "remove_marked_block() {",
+    '  file="$1"; start="$2"; end="$3"; out="$4"',
+    '  [ -f "$file" ] || { : > "$out"; return 0; }',
+    '  awk -v start="$start" -v end="$end" \'$0 == start { skip = 1; next } $0 == end { skip = 0; next } !skip { print }\' "$file" > "$out"',
+    "}",
+    "",
+    "codex_exporter_toml() {",
+    '  kind="$1"; endpoint="$2"; protocol="$3"; header_name="$4"; header_value="$5"',
+    '  if [ "$kind" = "none" ] || [ "$kind" = "statsig" ]; then printf "\\"%s\\"" "$kind"; return 0; fi',
+    '  safe_endpoint="$(toml_escape "$endpoint")"',
+    '  headers=""',
+    '  if [ -n "$header_name" ] && [ -n "$header_value" ]; then headers=", headers = { \\"$(toml_escape "$header_name")\\" = \\"$(toml_escape "$header_value")\\" }"; fi',
+    '  if [ "$protocol" = "grpc" ]; then',
+    '    printf "{ otlp-grpc = { endpoint = \\"%s\\"%s } }" "$safe_endpoint" "$headers"',
+    '  else',
+    '    http_protocol="binary"; [ "$protocol" = "http/json" ] && http_protocol="json"',
+    '    printf "{ otlp-http = { endpoint = \\"%s\\", protocol = \\"%s\\"%s } }" "$safe_endpoint" "$http_protocol" "$headers"',
+    '  fi',
+    "}",
+    "",
+    "configure_codex_telemetry() {",
+    '  endpoint="$1"; protocol="$2"; header_name="$3"; header_value="$4"; environment="$5"',
+    '  log_exporter="${18}"; trace_exporter="${19}"; metrics_exporter="${20}"; log_prompt="${21}"',
+    '  info "Codex CLI telemetry"',
+    '  config="$HOME/.codex/config.toml"',
+    '  mkdir -p "$(dirname "$config")"; touch "$config"',
+    '  start="# Dev Setup Builder - Codex telemetry start"; end="# Dev Setup Builder - Codex telemetry end"',
+    '  clean="$(mktemp)"',
+    '  remove_marked_block "$config" "$start" "$end" "$clean"',
+    '  if grep -Eq "^\\[otel\\]" "$clean"; then warn "Codex [otel] already exists outside Dev Setup Builder block; leaving it unchanged"; rm -f "$clean"; return 0; fi',
+    '  safe_endpoint="$(toml_escape "$endpoint")"',
+    "  {",
+    '    cat "$clean"',
+    '    printf "\\n%s\\n" "$start"',
+    '    printf "[otel]\\n"',
+    '    printf "environment = \\"%s\\"\\n" "$(toml_escape "$environment")"',
+    '    [ "$log_prompt" = "1" ] && printf "log_user_prompt = true\\n" || printf "log_user_prompt = false\\n"',
+    '    printf "exporter = %s\\n" "$(codex_exporter_toml "$log_exporter" "$endpoint" "$protocol" "$header_name" "$header_value")"',
+    '    printf "trace_exporter = %s\\n" "$(codex_exporter_toml "$trace_exporter" "$endpoint" "$protocol" "$header_name" "$header_value")"',
+    '    printf "metrics_exporter = %s\\n" "$(codex_exporter_toml "$metrics_exporter" "$endpoint" "$protocol" "$header_name" "$header_value")"',
+    '    printf "%s\\n" "$end"',
+    '  } >> "$config"',
+    '  rm -f "$clean"',
+    '  ok "Codex telemetry configured"',
+    "}",
+    "",
     "check_github_auth() {",
     '  info "GitHub CLI auth"',
     '  if ! has gh; then fail "GitHub CLI auth (gh missing)"; return 1; fi',
@@ -440,7 +576,7 @@ function buildMacScript(resolved, settings) {
   ].join("\n");
 }
 
-function buildWindowsScript(resolved, settings) {
+export function buildWindowsScript(resolved, settings) {
   const body = [];
   for (const id of visibleResolved(resolved)) {
     const item = packageById.get(id);
@@ -631,6 +767,97 @@ function buildWindowsScript(resolved, settings) {
     "  if (Has-Command 'npm') { Install-NpmGlobal -Label 'Claude Code CLI' -Package '@anthropic-ai/claude-code' -Command 'claude' } else { Fail 'Claude Code CLI' }",
     "}",
     "",
+    "function Set-ClaudeCodeTelemetry {",
+    "  param(",
+    "    [string]$Endpoint, [string]$Protocol, [string]$HeaderName, [string]$HeaderValue, [string]$Environment, [string]$ResourceAttributes,",
+    "    [string]$MetricInterval, [string]$LogsInterval, [string]$MetricsExporter, [string]$LogsExporter, [string]$TracesExporter,",
+    "    [string]$LogPrompts, [string]$LogAssistant, [string]$LogToolDetails, [string]$LogToolContent, [string]$RawMode, [string]$RawDir",
+    "  )",
+    "  Step 'Claude Code CLI telemetry'",
+    "  $combinedAttrs = \"deployment.environment=$Environment\"",
+    "  if ($ResourceAttributes) { $combinedAttrs = \"$combinedAttrs,$ResourceAttributes\" }",
+    "  $vars = @{",
+    "    CLAUDE_CODE_ENABLE_TELEMETRY = '1'",
+    "    OTEL_METRICS_EXPORTER = $MetricsExporter",
+    "    OTEL_LOGS_EXPORTER = $LogsExporter",
+    "    OTEL_EXPORTER_OTLP_PROTOCOL = $Protocol",
+    "    OTEL_EXPORTER_OTLP_ENDPOINT = $Endpoint",
+    "    OTEL_RESOURCE_ATTRIBUTES = $combinedAttrs",
+    "    OTEL_METRIC_EXPORT_INTERVAL = $MetricInterval",
+    "    OTEL_LOGS_EXPORT_INTERVAL = $LogsInterval",
+    "    OTEL_LOG_USER_PROMPTS = $LogPrompts",
+    "    OTEL_LOG_ASSISTANT_RESPONSES = $LogAssistant",
+    "    OTEL_LOG_TOOL_DETAILS = $LogToolDetails",
+    "    OTEL_LOG_TOOL_CONTENT = $LogToolContent",
+    "    OTEL_TRACES_EXPORTER = $TracesExporter",
+    "  }",
+    "  if ($TracesExporter -ne 'none') { $vars.CLAUDE_CODE_ENHANCED_TELEMETRY_BETA = '1' }",
+    "  if ($HeaderName -and $HeaderValue) { $vars.OTEL_EXPORTER_OTLP_HEADERS = \"$HeaderName=$HeaderValue\" }",
+    "  if ($RawMode -eq 'inline') { $vars.OTEL_LOG_RAW_API_BODIES = '1' }",
+    "  if ($RawMode -eq 'file' -and $RawDir) { $vars.OTEL_LOG_RAW_API_BODIES = \"file:$RawDir\" }",
+    "  foreach ($entry in $vars.GetEnumerator()) {",
+    "    [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'User')",
+    "    Set-Item -Path \"Env:\\$($entry.Key)\" -Value $entry.Value",
+    "  }",
+    "  foreach ($name in @('CLAUDE_CODE_ENHANCED_TELEMETRY_BETA','OTEL_EXPORTER_OTLP_HEADERS','OTEL_LOG_RAW_API_BODIES')) {",
+    "    if (-not $vars.ContainsKey($name)) { [Environment]::SetEnvironmentVariable($name, $null, 'User'); Remove-Item -Path \"Env:\\$name\" -ErrorAction SilentlyContinue }",
+    "  }",
+    "  Ok 'Claude Code telemetry configured'",
+    "}",
+    "",
+    "function ConvertTo-TomlString([string]$Text) {",
+    "  return $Text.Replace('\\', '\\\\').Replace('\"', '\\\"')",
+    "}",
+    "",
+    "function ConvertTo-CodexExporterToml {",
+    "  param([string]$Kind, [string]$Endpoint, [string]$Protocol, [string]$HeaderName, [string]$HeaderValue)",
+    "  if (($Kind -eq 'none') -or ($Kind -eq 'statsig')) { return \"`\"$Kind`\"\" }",
+    "  $safeEndpoint = ConvertTo-TomlString $Endpoint",
+    "  $headers = ''",
+    "  if ($HeaderName -and $HeaderValue) { $headers = ', headers = { \"' + (ConvertTo-TomlString $HeaderName) + '\" = \"' + (ConvertTo-TomlString $HeaderValue) + '\" }' }",
+    "  if ($Protocol -eq 'grpc') { return \"{ otlp-grpc = { endpoint = `\"$safeEndpoint`\"$headers } }\" }",
+    "  $httpProtocol = 'binary'",
+    "  if ($Protocol -eq 'http/json') { $httpProtocol = 'json' }",
+    "  return \"{ otlp-http = { endpoint = `\"$safeEndpoint`\", protocol = `\"$httpProtocol`\"$headers } }\"",
+    "}",
+    "",
+    "function Set-CodexTelemetry {",
+    "  param(",
+    "    [string]$Endpoint, [string]$Protocol, [string]$HeaderName, [string]$HeaderValue, [string]$Environment, [string]$ResourceAttributes,",
+    "    [string]$MetricInterval, [string]$LogsInterval, [string]$MetricsExporter, [string]$LogsExporter, [string]$TracesExporter,",
+    "    [string]$LogPrompts, [string]$LogAssistant, [string]$LogToolDetails, [string]$LogToolContent, [string]$RawMode, [string]$RawDir,",
+    "    [string]$CodexLogExporter, [string]$CodexTraceExporter, [string]$CodexMetricsExporter, [string]$CodexLogUserPrompt",
+    "  )",
+    "  Step 'Codex CLI telemetry'",
+    "  $dir = Join-Path $env:USERPROFILE '.codex'",
+    "  $config = Join-Path $dir 'config.toml'",
+    "  New-Item -ItemType Directory -Path $dir -Force | Out-Null",
+    "  if (-not (Test-Path $config)) { New-Item -ItemType File -Path $config -Force | Out-Null }",
+    "  $start = '# Dev Setup Builder - Codex telemetry start'",
+    "  $end = '# Dev Setup Builder - Codex telemetry end'",
+    "  $content = Get-Content -Path $config -Raw -ErrorAction SilentlyContinue",
+    "  $clean = [regex]::Replace($content, \"(?ms)^$([regex]::Escape($start))\\r?\\n.*?^$([regex]::Escape($end))\\r?\\n?\", '')",
+    "  if ($clean -match '(?m)^\\[otel\\]') { Warn 'Codex [otel] already exists outside Dev Setup Builder block; leaving it unchanged'; return }",
+    "  $safeEnvironment = ConvertTo-TomlString $Environment",
+    "  $logPrompt = if ($CodexLogUserPrompt -eq '1') { 'true' } else { 'false' }",
+    "  $logExporterToml = ConvertTo-CodexExporterToml $CodexLogExporter $Endpoint $Protocol $HeaderName $HeaderValue",
+    "  $traceExporterToml = ConvertTo-CodexExporterToml $CodexTraceExporter $Endpoint $Protocol $HeaderName $HeaderValue",
+    "  $metricsExporterToml = ConvertTo-CodexExporterToml $CodexMetricsExporter $Endpoint $Protocol $HeaderName $HeaderValue",
+    "  $block = @(",
+    "    $start",
+    "    '[otel]'",
+    "    \"environment = `\"$safeEnvironment`\"\"",
+    "    \"log_user_prompt = $logPrompt\"",
+    "    \"exporter = $logExporterToml\"",
+    "    \"trace_exporter = $traceExporterToml\"",
+    "    \"metrics_exporter = $metricsExporterToml\"",
+    "    $end",
+    "    ''",
+    "  )",
+    "  [IO.File]::WriteAllText($config, ($clean.TrimEnd() + \"`r`n`r`n\" + ($block -join \"`r`n\")), [Text.UTF8Encoding]::new($false))",
+    "  Ok 'Codex telemetry configured'",
+    "}",
+    "",
     "function Check-GitHubAuth {",
     "  Step 'GitHub CLI auth'",
     "  if (-not (Has-Command 'gh')) { Fail 'GitHub CLI auth (gh missing)'; return }",
@@ -678,62 +905,13 @@ function buildWindowsScript(resolved, settings) {
   ].join("\r\n");
 }
 
-function buildScript() {
-  const resolved = resolveSelection(state.selected, state.os);
-  const settings = getSettings();
-  return state.os === "mac" ? buildMacScript(resolved, settings) : buildWindowsScript(resolved, settings);
+export function buildScript(ids, os, settings) {
+  const resolved = resolveSelection(ids, os);
+  return os === "mac" ? buildMacScript(resolved, settings) : buildWindowsScript(resolved, settings);
 }
 
-function renderPackages() {
-  const root = document.getElementById("packageList");
-  const packages = PACKAGES.filter((item) => supportsOs(item, state.os));
-  const groups = [...new Set(packages.map((item) => item.group))];
-  root.innerHTML = groups.map((group) => {
-    const items = packages.filter((item) => item.group === group).map((item) => `
-      <label class="package">
-        <input type="checkbox" data-package="${item.id}" ${state.selected.has(item.id) ? "checked" : ""}>
-        <span>
-          <strong>${item.label}</strong>
-          <span>${item.note}</span>
-        </span>
-      </label>
-    `).join("");
-    return `<div class="group"><h3>${group}</h3>${items}</div>`;
-  }).join("");
-
-  root.querySelectorAll("[data-package]").forEach((input) => {
-    input.addEventListener("change", (event) => {
-      const id = event.currentTarget.dataset.package;
-      if (event.currentTarget.checked) {
-        state.selected.add(id);
-      } else {
-        state.selected.delete(id);
-      }
-      update();
-    });
-  });
-}
-
-function update() {
-  const resolved = resolveSelection(state.selected, state.os);
-  const script = buildScript();
-  const added = autoAdded(state.selected, resolved);
-  const file = fileName(state.os);
-  const preview = document.getElementById("scriptPreview");
-  preview.value = script;
-  document.getElementById("previewTitle").textContent = file;
-  document.getElementById("metaLine").innerHTML = [
-    `<span class="pill">${visibleResolved(resolved).length} tools</span>`,
-    `<span class="pill">${script.split(/\r?\n/).length} lines</span>`
-  ].join("");
-  document.getElementById("dependencyText").textContent = added.length ? `Auto-added: ${added.join(", ")}` : "";
-  document.getElementById("statusText").innerHTML = visibleResolved(resolved).length ? "Ready" : "<span class='warning'>No tools selected</span>";
-  updatePermissionHelp();
-  renderPackages();
-}
-
-function updatePermissionHelp() {
-  const items = state.os === "mac" ? [
+export function permissionHelp(os) {
+  return os === "mac" ? [
     "Run with bash setup-mac.command if the download is not executable.",
     "For Finder double-click, run chmod +x setup-mac.command first.",
     "If macOS blocks it, right-click the file, choose Open, then Open again.",
@@ -744,37 +922,16 @@ function updatePermissionHelp() {
     "If SmartScreen appears, choose More info, then Run anyway.",
     "PowerShell policy is bypassed only for this script run."
   ];
-  document.getElementById("permissionHelp").innerHTML = items.map((item) => `<li>${item}</li>`).join("");
 }
 
-function setPreset(name) {
+export function presetSelection(name) {
   if (name === "clear") {
-    state.selected = new Set();
-  } else {
-    state.selected = new Set(PACKAGES.filter((item) => item.presets.includes(name)).map((item) => item.id));
+    return new Set();
   }
-  update();
+  return new Set(PACKAGES.filter((item) => item.presets.includes(name)).map((item) => item.id));
 }
 
-function downloadScript() {
-  const script = buildScript();
-  const blob = new Blob([script], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName(state.os);
-  a.click();
-  URL.revokeObjectURL(url);
-  document.getElementById("statusText").textContent = `Downloaded ${a.download}`;
-}
-
-async function copyScript() {
-  const text = buildScript();
-  await navigator.clipboard.writeText(text);
-  document.getElementById("statusText").textContent = "Copied script";
-}
-
-function selfTest() {
+export function selfTest() {
   const settings = { gitName: "A", gitEmail: "a@example.com" };
   const selected = new Set(["codex", "claude-extension"]);
   const mac = resolveSelection(selected, "mac");
@@ -806,6 +963,10 @@ function selfTest() {
     macScript.includes("anthropic.claude-code"),
     winScript.includes("@openai/codex"),
     winScript.includes("anthropic.claude-code"),
+    buildMacScript(resolveSelection(new Set(["claude-code-telemetry"]), "mac"), settings).includes("CLAUDE_CODE_ENABLE_TELEMETRY=1"),
+    buildMacScript(resolveSelection(new Set(["codex-telemetry"]), "mac"), settings).includes("[otel]"),
+    buildWindowsScript(resolveSelection(new Set(["claude-code-telemetry"]), "win"), settings).includes("CLAUDE_CODE_ENABLE_TELEMETRY"),
+    buildWindowsScript(resolveSelection(new Set(["codex-telemetry"]), "win"), settings).includes("Set-CodexTelemetry"),
     macSetupScript.includes("install_pnpm"),
     macSetupScript.includes("check_github_auth"),
     !macSetupScript.includes("WSL2"),
@@ -818,41 +979,3 @@ function selfTest() {
   ];
   return { ok: checks.every(Boolean), checks };
 }
-
-function init() {
-  document.querySelectorAll("input[name='os']").forEach((input) => {
-    input.addEventListener("change", (event) => {
-      state.os = event.currentTarget.value;
-      update();
-    });
-  });
-  document.querySelectorAll("[data-preset]").forEach((button) => {
-    button.addEventListener("click", () => setPreset(button.dataset.preset));
-  });
-  document.getElementById("gitName").addEventListener("input", update);
-  document.getElementById("gitEmail").addEventListener("input", update);
-  document.getElementById("downloadScript").addEventListener("click", downloadScript);
-  document.getElementById("copyScript").addEventListener("click", () => {
-    copyScript().catch(() => {
-      document.getElementById("statusText").textContent = "Copy failed";
-    });
-  });
-
-  if (new URLSearchParams(location.search).has("selftest")) {
-    const result = selfTest();
-    document.body.dataset.selftest = result.ok ? "pass" : "fail";
-    if (!result.ok) {
-      console.error("Self-test failed", result);
-    }
-  }
-  update();
-}
-
-window.DevSetupBuilder = {
-  buildMacScript,
-  buildWindowsScript,
-  resolveSelection,
-  selfTest
-};
-
-document.addEventListener("DOMContentLoaded", init);

@@ -1,20 +1,41 @@
 # Dev Setup Builder
 
-Static checklist app that generates macOS `.command` and Windows `.bat` setup scripts from selected tools.
+React checklist app that generates macOS `.command` and Windows `.bat` setup scripts from selected tools.
 
 ## Deploy
 
-This repo is intentionally buildless. Serve `index.html` from GitHub Pages.
+GitHub Pages is deployed from the Vite `dist/` build through `.github/workflows/deploy-pages.yml`.
 
 ## Local check
 
-Open `index.html` directly, or run a local static server:
+Install dependencies and run the Vite dev server:
 
 ```bash
-python3 -m http.server 8080
+pnpm install
+pnpm dev
 ```
 
-Then visit `http://localhost:8080`.
+Then visit the local URL printed by Vite.
+
+Production build:
+
+```bash
+pnpm build
+```
+
+Tests:
+
+```bash
+pnpm test
+```
+
+E2E tests:
+
+```bash
+pnpm test:e2e
+```
+
+Playwright writes full-page screenshots to `test-results/screenshots/`.
 
 ## Generated scripts
 

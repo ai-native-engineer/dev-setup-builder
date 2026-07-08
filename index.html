@@ -3,85 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dev Setup Builder</title>
-  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="data:,">
+  <title>개발 환경 설치 도우미</title>
 </head>
 <body>
-  <main class="app">
-    <header class="topbar">
-      <div class="brand">
-        <h1>Dev Setup Builder</h1>
-        <p>Build a macOS or Windows setup script from the tools you select.</p>
-      </div>
-      <div class="actions">
-        <button class="button" id="copyScript" type="button">Copy script</button>
-        <button class="button primary" id="downloadScript" type="button">Download</button>
-      </div>
-    </header>
-
-    <div class="builder">
-      <section class="panel controls" aria-label="Setup builder controls">
-        <div class="section compact">
-          <div class="section-title">
-            <h2>Target</h2>
-          </div>
-          <div class="segmented" role="radiogroup" aria-label="Target operating system">
-            <label><input type="radio" name="os" value="mac" checked> macOS</label>
-            <label><input type="radio" name="os" value="win"> Windows</label>
-          </div>
-        </div>
-
-        <div class="section compact">
-          <div class="section-title">
-            <h2>Preset</h2>
-          </div>
-          <div class="preset-row">
-            <button class="button" data-preset="minimal" type="button">Minimal</button>
-            <button class="button" data-preset="agent" type="button">Agent</button>
-            <button class="button" data-preset="clear" type="button">Clear</button>
-          </div>
-        </div>
-
-        <div class="package-list" id="packageList" aria-label="Installable tools"></div>
-
-        <div class="section">
-          <div class="section-title">
-            <h2>Git defaults</h2>
-          </div>
-          <div class="settings">
-            <div class="field">
-              <label for="gitName">Name used only when Git identity is selected</label>
-              <input id="gitName" value="Claude Code" autocomplete="name">
-            </div>
-            <div class="field">
-              <label for="gitEmail">Email used only when Git identity is selected</label>
-              <input id="gitEmail" value="noreply@anthropic.com" autocomplete="email">
-            </div>
-          </div>
-        </div>
-
-        <div class="section compact">
-          <div class="section-title">
-            <h2>Permission help</h2>
-          </div>
-          <ul class="help-list" id="permissionHelp"></ul>
-        </div>
-      </section>
-
-      <section class="panel preview" aria-label="Generated script preview">
-        <div class="preview-head">
-          <h2 id="previewTitle">setup-mac.command</h2>
-          <div class="meta" id="metaLine"></div>
-        </div>
-        <textarea id="scriptPreview" spellcheck="false" aria-label="Generated script"></textarea>
-        <div class="status">
-          <span id="statusText">Ready</span>
-          <span id="dependencyText"></span>
-        </div>
-      </section>
-    </div>
-  </main>
-
-  <script src="js/app.js"></script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

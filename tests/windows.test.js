@@ -1,59 +1,65 @@
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const vm = require("node:vm");
+import assert from "node:assert/strict";
+import {
+  buildWindowsScript,
+  resolveSelection,
+  selfTest
+} from "../src/builder.js";
 
-function loadBuilder() {
-  const context = {
-    console,
-    window: {},
-    document: { addEventListener() {} },
-    URLSearchParams,
-    location: { search: "" }
-  };
-  vm.createContext(context);
-  vm.runInContext(
-    fs.readFileSync(path.join(__dirname, "..", "js", "app.js"), "utf8"),
-    context,
-    { filename: "js/app.js" }
-  );
-  return context.window.DevSetupBuilder;
-}
+const settings = { gitName: "A", gitEmail: "a@example.com" };
 
-function main() {
-  const builder = loadBuilder();
-  const settings = { gitName: "A", gitEmail: "a@example.com" };
+const codex = resolveSelection(new Set(["codex"]), "win");
+const codexScript = buildWindowsScript(codex, settings);
+const nodeIndex = codexScript.indexOf("Install-Winget -Label 'Node.js LTS'");
+const codexIndex = codexScript.indexOf("Install-NpmGlobal -Label 'Codex CLI'");
 
-  const codex = builder.resolveSelection(new Set(["codex"]), "win");
-  const codexScript = builder.buildWindowsScript(codex, settings);
-  const nodeIndex = codexScript.indexOf("Install-Winget -Label 'Node.js LTS'");
-  const codexIndex = codexScript.indexOf("Install-NpmGlobal -Label 'Codex CLI'");
+assert.equal(codex.has("node"), true);
+assert.equal(nodeIndex >= 0 && nodeIndex < codexIndex, true);
 
-  assert.equal(codex.has("node"), true);
-  assert.equal(nodeIndex >= 0 && nodeIndex < codexIndex, true);
+const extension = resolveSelection(new Set(["claude-extension"]), "win");
+const extensionScript = buildWindowsScript(extension, settings);
 
-  const extension = builder.resolveSelection(new Set(["claude-extension"]), "win");
-  const extensionScript = builder.buildWindowsScript(extension, settings);
+assert.equal(extension.has("vscode"), true);
+assert.match(extensionScript, /Install-VSCode/);
+assert.match(extensionScript, /Install-CodeExtension -ExtensionId 'anthropic\.claude-code'/);
 
-  assert.equal(extension.has("vscode"), true);
-  assert.match(extensionScript, /Install-VSCode/);
-  assert.match(extensionScript, /Install-CodeExtension -ExtensionId 'anthropic\.claude-code'/);
+const setup = resolveSelection(new Set(["pnpm", "github-auth", "wsl2"]), "win");
+const setupScript = buildWindowsScript(setup, settings);
 
-  const setup = builder.resolveSelection(new Set(["pnpm", "github-auth", "wsl2"]), "win");
-  const setupScript = builder.buildWindowsScript(setup, settings);
+assert.equal(setup.has("node"), true);
+assert.equal(setup.has("gh"), true);
+assert.match(setupScript, /Install-Pnpm/);
+assert.match(setupScript, /Check-GitHubAuth/);
+assert.match(setupScript, /Install-WSL2/);
+assert.match(setupScript, /wsl --install --no-launch/);
 
-  assert.equal(setup.has("node"), true);
-  assert.equal(setup.has("gh"), true);
-  assert.match(setupScript, /Install-Pnpm/);
-  assert.match(setupScript, /Check-GitHubAuth/);
-  assert.match(setupScript, /Install-WSL2/);
-  assert.match(setupScript, /wsl --install --no-launch/);
+const dockerScript = buildWindowsScript(new Set(["docker"]), settings);
+assert.match(dockerScript, /Docker\.DockerDesktop/);
 
-  const dockerScript = builder.buildWindowsScript(new Set(["docker"]), settings);
-  assert.match(dockerScript, /Docker\.DockerDesktop/);
+const claudeTelemetry = resolveSelection(new Set(["claude-code-telemetry"]), "win");
+const claudeTelemetryScript = buildWindowsScript(claudeTelemetry, {
+  ...settings,
+  otelEndpoint: "http://collector.local:4317",
+  claudeLogUserPrompts: true,
+  claudeLogToolDetails: true
+});
 
-  assert.equal(builder.selfTest().ok, true);
-}
+assert.equal(claudeTelemetry.has("claude-code"), true);
+assert.match(claudeTelemetryScript, /Set-ClaudeCodeTelemetry 'http:\/\/collector\.local:4317' 'grpc' '' '' 'dev' '' '60000' '5000' 'otlp' 'otlp' 'none' '1' '0' '1'/);
+assert.match(claudeTelemetryScript, /CLAUDE_CODE_ENABLE_TELEMETRY = '1'/);
+assert.match(claudeTelemetryScript, /OTEL_LOG_USER_PROMPTS = \$LogPrompts/);
 
-main();
+const codexTelemetry = resolveSelection(new Set(["codex-telemetry"]), "win");
+const codexTelemetryScript = buildWindowsScript(codexTelemetry, {
+  ...settings,
+  codexLogUserPrompt: true,
+  codexMetricsExporter: "otlp"
+});
+
+assert.equal(codexTelemetry.has("codex"), true);
+assert.match(codexTelemetryScript, /Set-CodexTelemetry/);
+assert.match(codexTelemetryScript, /\[otel\]/);
+assert.match(codexTelemetryScript, /metrics_exporter = \$metricsExporterToml/);
+assert.match(codexTelemetryScript, /Set-CodexTelemetry 'http:\/\/localhost:4317' 'grpc' '' '' 'dev' '' '60000' '5000' 'otlp' 'otlp' 'none' '0' '0' '0' '0' 'off' '' 'otlp' 'none' 'otlp' '1'/);
+
+assert.equal(selfTest().ok, true);
 console.log("windows tests pass");

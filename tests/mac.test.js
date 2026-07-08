@@ -1,78 +1,66 @@
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const vm = require("node:vm");
+import assert from "node:assert/strict";
+import {
+  PACKAGES,
+  buildMacScript,
+  resolveSelection,
+  selfTest,
+  supportsOs
+} from "../src/builder.js";
 
-function loadContext() {
-  let packageHtml = "";
-  const packageList = {
-    set innerHTML(value) {
-      packageHtml = value;
-    },
-    get innerHTML() {
-      return packageHtml;
-    },
-    querySelectorAll() {
-      return [];
-    }
-  };
-  const context = {
-    console,
-    window: {},
-    document: {
-      addEventListener() {},
-      getElementById(id) {
-        if (id === "packageList") {
-          return packageList;
-        }
-        throw new Error(`Unexpected element: ${id}`);
-      }
-    },
-    URLSearchParams,
-    location: { search: "" },
-    packageHtml: () => packageHtml
-  };
-  vm.createContext(context);
-  vm.runInContext(
-    fs.readFileSync(path.join(__dirname, "..", "js", "app.js"), "utf8"),
-    context,
-    { filename: "js/app.js" }
-  );
-  return context;
-}
+const settings = { gitName: "A", gitEmail: "a@example.com" };
 
-function main() {
-  const context = loadContext();
-  const builder = context.window.DevSetupBuilder;
-  const settings = { gitName: "A", gitEmail: "a@example.com" };
+const codex = resolveSelection(new Set(["codex"]), "mac");
+const codexScript = buildMacScript(codex, settings);
+const nodeIndex = codexScript.indexOf('brew_formula "Node.js"');
+const codexIndex = codexScript.indexOf('npm_global "Codex CLI"');
 
-  const codex = builder.resolveSelection(new Set(["codex"]), "mac");
-  const codexScript = builder.buildMacScript(codex, settings);
-  const nodeIndex = codexScript.indexOf('brew_formula "Node.js"');
-  const codexIndex = codexScript.indexOf('npm_global "Codex CLI"');
+assert.equal(codex.has("node"), true);
+assert.equal(codex.has("homebrew"), true);
+assert.equal(nodeIndex >= 0 && nodeIndex < codexIndex, true);
 
-  assert.equal(codex.has("node"), true);
-  assert.equal(codex.has("homebrew"), true);
-  assert.equal(nodeIndex >= 0 && nodeIndex < codexIndex, true);
+const setup = resolveSelection(new Set(["pnpm", "github-auth", "wsl2"]), "mac");
+const setupScript = buildMacScript(setup, settings);
 
-  const setup = builder.resolveSelection(new Set(["pnpm", "github-auth", "wsl2"]), "mac");
-  const setupScript = builder.buildMacScript(setup, settings);
+assert.equal(setup.has("node"), true);
+assert.equal(setup.has("gh"), true);
+assert.equal(setup.has("wsl2"), false);
+assert.match(setupScript, /install_pnpm/);
+assert.match(setupScript, /check_github_auth/);
+assert.doesNotMatch(setupScript, /WSL2/);
 
-  assert.equal(setup.has("node"), true);
-  assert.equal(setup.has("gh"), true);
-  assert.equal(setup.has("wsl2"), false);
-  assert.match(setupScript, /install_pnpm/);
-  assert.match(setupScript, /check_github_auth/);
-  assert.doesNotMatch(setupScript, /WSL2/);
+const macPackages = PACKAGES.filter((item) => supportsOs(item, "mac"));
+assert.equal(macPackages.some((item) => item.id === "wsl2"), false);
 
-  context.renderPackages();
-  assert.doesNotMatch(context.packageHtml(), /Windows WSL2/);
+const dockerScript = buildMacScript(new Set(["homebrew", "docker"]), settings);
+assert.match(dockerScript, /brew_cask "Docker Desktop" "docker"/);
 
-  const dockerScript = builder.buildMacScript(new Set(["homebrew", "docker"]), settings);
-  assert.match(dockerScript, /brew_cask "Docker Desktop" "docker"/);
+const claudeTelemetry = resolveSelection(new Set(["claude-code-telemetry"]), "mac");
+const claudeTelemetryScript = buildMacScript(claudeTelemetry, {
+  ...settings,
+  otelEndpoint: "http://collector.local:4317",
+  claudeLogUserPrompts: true,
+  claudeLogToolDetails: true
+});
 
-  assert.equal(builder.selfTest().ok, true);
-}
+assert.equal(claudeTelemetry.has("claude-code"), true);
+assert.match(claudeTelemetryScript, /CLAUDE_CODE_ENABLE_TELEMETRY=1/);
+assert.match(claudeTelemetryScript, /claude-code-telemetry\.sh/);
+assert.match(claudeTelemetryScript, /OTEL_EXPORTER_OTLP_ENDPOINT=%s/);
+assert.match(claudeTelemetryScript, /configure_claude_code_telemetry 'http:\/\/collector\.local:4317' 'grpc' '' '' 'dev' '' '60000' '5000' 'otlp' 'otlp' 'none' '1' '0' '1'/);
 
-main();
+const codexTelemetry = resolveSelection(new Set(["codex-telemetry"]), "mac");
+const codexTelemetryScript = buildMacScript(codexTelemetry, {
+  ...settings,
+  codexLogUserPrompt: true,
+  codexMetricsExporter: "otlp"
+});
+
+assert.equal(codexTelemetry.has("codex"), true);
+assert.match(codexTelemetryScript, /config="\$HOME\/\.codex\/config\.toml"/);
+assert.match(codexTelemetryScript, /Dev Setup Builder - Codex telemetry start/);
+assert.match(codexTelemetryScript, /\[otel\]/);
+assert.match(codexTelemetryScript, /metrics_exporter = %s/);
+assert.match(codexTelemetryScript, /configure_codex_telemetry 'http:\/\/localhost:4317' 'grpc' '' '' 'dev' '' '60000' '5000' 'otlp' 'otlp' 'none' '0' '0' '0' '0' 'off' '' 'otlp' 'none' 'otlp' '1'/);
+
+assert.equal(selfTest().ok, true);
 console.log("mac tests pass");
