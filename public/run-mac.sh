@@ -14,7 +14,9 @@ fi
 chmod +x "$tmp"
 # Reconnect stdin to the terminal: when invoked via `curl | bash`, stdin is the
 # consumed pipe, so Homebrew's installer (sudo password, prompts) could not read input.
-if [ -e /dev/tty ]; then
+# /dev/tty exists even without a controlling terminal (CI, cron), where opening it
+# fails with ENXIO; probe that it is actually openable before redirecting.
+if { : < /dev/tty; } 2>/dev/null; then
   bash "$tmp" < /dev/tty
 else
   bash "$tmp"
