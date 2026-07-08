@@ -18,6 +18,14 @@ assert.equal(codex.has("node"), true);
 assert.equal(codex.has("homebrew"), true);
 assert.equal(nodeIndex >= 0 && nodeIndex < codexIndex, true);
 
+const codexApp = resolveSelection(new Set(["codex-app"]), "mac");
+const codexAppScript = buildMacScript(codexApp, settings);
+
+assert.equal(codexApp.has("homebrew"), false);
+assert.match(codexAppScript, /\ninstall_codex_app\n/);
+assert.match(codexAppScript, /https:\/\/persistent\.oaistatic\.com\/codex-app-prod\/Codex\.dmg/);
+assert.match(codexAppScript, /https:\/\/persistent\.oaistatic\.com\/codex-app-prod\/Codex-latest-x64\.dmg/);
+
 const setup = resolveSelection(new Set(["pnpm", "github-auth", "wsl2"]), "mac");
 const setupScript = buildMacScript(setup, settings);
 

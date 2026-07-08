@@ -1,12 +1,31 @@
 # Dev Setup Builder
 
-React checklist app that generates macOS `.command` and Windows `.bat` setup scripts from selected tools.
+React checklist app that generates macOS `.command` and Windows `.bat` setup scripts for a developer workstation.
 
-## Deploy
+Live site: <https://ai-native-engineer.github.io/dev-setup-builder/>
 
-GitHub Pages is deployed from the Vite `dist/` build through `.github/workflows/deploy-pages.yml`.
+## What It Generates
 
-## Local check
+- Core tools: Git, Node.js, pnpm, Python, uv, Bun, Docker Desktop, and Windows WSL2.
+- Editor tools: VS Code and the Claude Code VS Code extension.
+- AI tools: Claude Desktop, Claude Code CLI, Codex App, and Codex CLI.
+- Source control tools: GitHub CLI, GitHub auth check, GitLab CLI, and Git identity defaults.
+- Optional deployment tool: Vercel CLI.
+
+Advanced observability settings for Claude Code CLI and Codex CLI are opt-in. They stay off by default, and the UI's "select all" action does not enable them. Prompt/body collection toggles are also off by default.
+
+Switching from macOS to Windows enables WSL2 by default because a Windows developer setup usually needs it.
+
+## Direct Terminal Run
+
+The app can copy a one-line terminal command that downloads a small public runner and passes the generated setup script as base64:
+
+- `public/run-mac.sh`
+- `public/run-windows.ps1`
+
+Those public runner files must stay deployable because the generated terminal command references them through the GitHub Pages site.
+
+## Local Development
 
 Install dependencies and run the Vite dev server:
 
@@ -23,7 +42,7 @@ Production build:
 pnpm build
 ```
 
-Tests:
+Unit and script tests:
 
 ```bash
 pnpm test
@@ -37,13 +56,13 @@ pnpm test:e2e
 
 Playwright writes full-page screenshots to `test-results/screenshots/`.
 
-## Generated scripts
+## Deploy
 
-The app only emits selected tools plus required dependencies. It does not write editor settings unless the generated script explicitly includes that selected step in the future.
+GitHub Pages is deployed from the Vite `dist/` build through `.github/workflows/deploy-pages.yml`.
 
-macOS downloads may not keep executable permissions. Run the generated file with `bash setup-mac.command`, or run `chmod +x setup-mac.command` before double-clicking it in Finder.
+The Vite base path is `/dev-setup-builder/`, so the repository name must stay `dev-setup-builder` unless `vite.config.js`, Playwright base URLs, and docs are updated together.
 
-## Permission help
+## Permission Help
 
 macOS:
 

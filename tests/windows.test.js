@@ -15,6 +15,14 @@ const codexIndex = codexScript.indexOf("Install-NpmGlobal -Label 'Codex CLI'");
 assert.equal(codex.has("node"), true);
 assert.equal(nodeIndex >= 0 && nodeIndex < codexIndex, true);
 
+const codexApp = resolveSelection(new Set(["codex-app"]), "win");
+const codexAppScript = buildWindowsScript(codexApp, settings);
+
+assert.equal(codexApp.has("node"), false);
+assert.match(codexAppScript, /(^|\r\n)Install-CodexApp(\r\n|$)/);
+assert.match(codexAppScript, /9PLM9XGG6VKS/);
+assert.match(codexAppScript, /--source msstore/);
+
 const extension = resolveSelection(new Set(["claude-extension"]), "win");
 const extensionScript = buildWindowsScript(extension, settings);
 

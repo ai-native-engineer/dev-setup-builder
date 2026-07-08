@@ -1,8 +1,13 @@
-import { useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Copy, Download, FileDown } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, Copy, Download, FileDown, Link, Terminal } from "lucide-react";
 import { Button } from "@astryxdesign/core/Button";
+import { Badge } from "@astryxdesign/core/Badge";
+import { Card } from "@astryxdesign/core/Card";
 import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
+import { Collapsible } from "@astryxdesign/core/Collapsible";
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
+import { Selector } from "@astryxdesign/core/Selector";
+import { Switch } from "@astryxdesign/core/Switch";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { FaCode, FaGitAlt, FaRobot, FaUserGear, FaWindows } from "react-icons/fa6";
@@ -128,6 +133,7 @@ const PACKAGE_TEXT = {
   "claude-code": { note: "Claude Code 명령줄 도구입니다. 공식 설치 방식을 우선 사용합니다." },
   "claude-code-telemetry": { label: "Claude Code 관측 로그", note: "Claude Code 실행 로그 설정을 추가합니다. 프롬프트 본문은 기록하지 않습니다." },
   "claude-extension": { label: "Claude Code VS Code 확장", note: "VS Code에서 Claude Code를 쓰기 위한 확장입니다." },
+  "codex-app": { note: "OpenAI Codex 데스크톱 앱입니다. macOS와 Windows 공식 앱을 설치합니다." },
   codex: { note: "@openai/codex 명령줄 도구를 npm으로 설치합니다." },
   "codex-telemetry": { label: "Codex 관측 로그", note: "Codex 실행 로그 설정을 추가합니다. 프롬프트 본문은 기록하지 않습니다." },
   vercel: { note: "Vercel 배포용 명령줄 도구를 설치합니다." },
@@ -151,6 +157,7 @@ const PACKAGE_ICONS = {
   "claude-code": [SiClaudecode, "claude"],
   "claude-code-telemetry": [SiClaudecode, "claude"],
   "claude-extension": [SiAnthropic, "claude"],
+  "codex-app": [FaRobot, "openai"],
   codex: [FaRobot, "openai"],
   "codex-telemetry": [FaRobot, "openai"],
   vercel: [SiVercel, "vercel"],
@@ -161,6 +168,8 @@ const PACKAGE_ICONS = {
 };
 
 const ADVANCED_PACKAGE_IDS = new Set(["claude-code-telemetry", "codex-telemetry"]);
+const PACKAGE_IDS = new Set(PACKAGES.map((item) => item.id));
+const URL_SETTING_KEYS = Object.keys(DEFAULT_SETTINGS);
 
 const PERMISSION_HELP = {
   mac: [
@@ -232,28 +241,106 @@ function packageIcon(id) {
 
 function SettingSelect({ label, value, options, onChange }) {
   return (
-    <label className="setting-field">
-      <span>{label}</span>
-      <select className="select-input" value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map(([optionValue, optionLabel]) => (
-          <option key={optionValue} value={optionValue}>{optionLabel}</option>
-        ))}
-      </select>
-    </label>
+    <Selector
+      label={label}
+      value={value}
+      options={options.map(([optionValue, optionLabel]) => ({ value: optionValue, label: optionLabel }))}
+      onChange={onChange}
+      size="sm"
+      width="100%"
+    />
   );
 }
 
 function SettingToggle({ label, checked, onChange }) {
   return (
-    <label className="toggle-line">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
-      <span>{label}</span>
-    </label>
+    <Switch
+      className="setting-switch"
+      label={label}
+      value={checked}
+      onChange={onChange}
+      labelPosition="start"
+      labelSpacing="spread"
+      width="100%"
+    />
   );
 }
 
+function SettingTextInput(props) {
+  return <TextInput size="sm" width="100%" {...props} />;
+}
+
 function allSelection() {
-  return new Set(PACKAGES.map((item) => item.id));
+  return new Set(PACKAGES.filter((item) => !ADVANCED_PACKAGE_IDS.has(item.id)).map((item) => item.id));
+}
+
+function parseUrlState() {
+  if (typeof window === "undefined") {
+    return { os: "mac", selected: allSelection(), settings: DEFAULT_SETTINGS };
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const targetOs = params.get("os") === "win" ? "win" : "mac";
+  let selected = allSelection();
+
+  if (params.has("tools")) {
+    selected = new Set(params.get("tools").split(",").filter((id) => PACKAGE_IDS.has(id)));
+  }
+
+  const settings = { ...DEFAULT_SETTINGS };
+  for (const key of URL_SETTING_KEYS) {
+    if (!params.has(key)) {
+      continue;
+    }
+    const value = params.get(key);
+    settings[key] = typeof DEFAULT_SETTINGS[key] === "boolean" ? value === "1" : value;
+  }
+
+  return { os: targetOs, selected, settings };
+}
+
+function selectedParam(selected, os) {
+  return PACKAGES.filter((item) => supportsOs(item, os) && selected.has(item.id)).map((item) => item.id).join(",");
+}
+
+function settingParam(value) {
+  return typeof value === "boolean" ? (value ? "1" : "0") : value;
+}
+
+function urlSearch(os, selected, settings) {
+  const params = new URLSearchParams();
+  params.set("os", os);
+  params.set("tools", selectedParam(selected, os));
+
+  for (const key of URL_SETTING_KEYS) {
+    const value = settings[key];
+    if (value !== DEFAULT_SETTINGS[key]) {
+      params.set(key, settingParam(value));
+    }
+  }
+
+  return params.toString();
+}
+
+function base64Utf8(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 8192));
+  }
+  return btoa(binary);
+}
+
+function publicAssetUrl(fileName) {
+  return new URL(`${import.meta.env.BASE_URL}${fileName}`, window.location.origin).href;
+}
+
+function terminalInstallCommand(os, script) {
+  const encodedScript = base64Utf8(script);
+  if (os === "mac") {
+    return `curl -fsSL '${publicAssetUrl("run-mac.sh")}' | DEV_SETUP_SCRIPT_B64='${encodedScript}' bash`;
+  }
+  return `powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:DEV_SETUP_SCRIPT_B64='${encodedScript}'; iex (Invoke-WebRequest -UseBasicParsing '${publicAssetUrl("run-windows.ps1")}').Content"`;
 }
 
 function groupDomId(group) {
@@ -276,13 +363,15 @@ function copyFallback(text) {
 }
 
 function App() {
-  const [os, setOs] = useState("mac");
-  const [selected, setSelected] = useState(() => allSelection());
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const initialUrlState = useRef();
+  initialUrlState.current ||= parseUrlState();
+  const [os, setOs] = useState(initialUrlState.current.os);
+  const [selected, setSelected] = useState(initialUrlState.current.selected);
+  const [settings, setSettings] = useState(initialUrlState.current.settings);
   const [status, setStatus] = useState(STATUS_TEXT.ready);
   const [lastAction, setLastAction] = useState("");
   const [copiedCommand, setCopiedCommand] = useState("");
-  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set(["Advanced"]));
   const statusTimer = useRef();
   const commandTimer = useRef();
 
@@ -292,11 +381,16 @@ function App() {
   const selectedRatio = packages.length ? Math.round((selectedCount / packages.length) * 100) : 0;
   const resolved = useMemo(() => resolveSelection(selected, os), [selected, os]);
   const script = useMemo(() => buildScript(selected, os, settings), [selected, os, settings]);
+  const shareLink = useMemo(() => `${window.location.origin}${window.location.pathname}?${urlSearch(os, selected, settings)}`, [os, selected, settings]);
+  const installCommand = useMemo(() => terminalInstallCommand(os, script), [os, script]);
   const added = useMemo(() => autoAdded(selected, resolved), [selected, resolved]);
   const tools = visibleResolved(resolved);
   const currentFileName = fileName(os);
-  const showGitDefaults = resolved.has("git-config");
   const showTelemetryDefaults = resolved.has("claude-code-telemetry") || resolved.has("codex-telemetry");
+
+  useEffect(() => {
+    window.history.replaceState(null, "", `${window.location.pathname}?${urlSearch(os, selected, settings)}`);
+  }, [os, selected, settings]);
 
   function showStatus(text, action = "") {
     setStatus(text);
@@ -310,6 +404,9 @@ function App() {
 
   function setTarget(nextOs) {
     setOs(nextOs);
+    if (nextOs === "win") {
+      setSelected((current) => new Set([...current, "wsl2"]));
+    }
     setStatus(STATUS_TEXT.ready);
     setLastAction("");
   }
@@ -342,6 +439,82 @@ function App() {
     });
   }
 
+  function packageSettings(item) {
+    if (!selected.has(item.id)) {
+      return null;
+    }
+
+    if (item.id === "git-config") {
+      return (
+        <Collapsible className="package-settings" trigger="Git 기본값 수정" defaultIsOpen={false}>
+          <div className="settings">
+            <SettingTextInput
+              htmlName="gitName"
+              label="이름"
+              value={settings.gitName}
+              onChange={(value) => updateSetting("gitName", value)}
+            />
+            <SettingTextInput
+              htmlName="gitEmail"
+              label="이메일"
+              value={settings.gitEmail}
+              onChange={(value) => updateSetting("gitEmail", value)}
+              type="email"
+            />
+          </div>
+        </Collapsible>
+      );
+    }
+
+    if (item.id === "claude-code-telemetry") {
+      return (
+        <Collapsible className="package-settings" trigger="Claude Code 세부 설정" defaultIsOpen={false}>
+          <div className="settings">
+            <div className="settings-grid">
+              <SettingSelect label="Metrics" value={settings.claudeMetricsExporter} options={CLAUDE_METRICS_OPTIONS} onChange={(value) => updateSetting("claudeMetricsExporter", value)} />
+              <SettingSelect label="Logs" value={settings.claudeLogsExporter} options={CLAUDE_LOG_OPTIONS} onChange={(value) => updateSetting("claudeLogsExporter", value)} />
+              <SettingSelect label="Traces" value={settings.claudeTracesExporter} options={CLAUDE_TRACE_OPTIONS} onChange={(value) => updateSetting("claudeTracesExporter", value)} />
+              <SettingSelect label="Raw API body" value={settings.claudeRawApiBodiesMode} options={RAW_BODY_OPTIONS} onChange={(value) => updateSetting("claudeRawApiBodiesMode", value)} />
+            </div>
+            {settings.claudeRawApiBodiesMode === "file" ? (
+              <SettingTextInput
+                htmlName="claudeRawApiBodiesDir"
+                label="Raw body 저장 경로"
+                value={settings.claudeRawApiBodiesDir}
+                onChange={(value) => updateSetting("claudeRawApiBodiesDir", value)}
+              />
+            ) : null}
+            <div className="toggle-grid">
+              <SettingToggle label="프롬프트 본문 수집" checked={settings.claudeLogUserPrompts} onChange={(value) => updateSetting("claudeLogUserPrompts", value)} />
+              <SettingToggle label="Assistant 응답 수집" checked={settings.claudeLogAssistantResponses} onChange={(value) => updateSetting("claudeLogAssistantResponses", value)} />
+              <SettingToggle label="Tool 상세 수집" checked={settings.claudeLogToolDetails} onChange={(value) => updateSetting("claudeLogToolDetails", value)} />
+              <SettingToggle label="Tool 입출력 내용 수집" checked={settings.claudeLogToolContent} onChange={(value) => updateSetting("claudeLogToolContent", value)} />
+            </div>
+          </div>
+        </Collapsible>
+      );
+    }
+
+    if (item.id === "codex-telemetry") {
+      return (
+        <Collapsible className="package-settings" trigger="Codex 세부 설정" defaultIsOpen={false}>
+          <div className="settings">
+            <div className="settings-grid">
+              <SettingSelect label="Logs" value={settings.codexLogExporter} options={CODEX_EXPORTER_OPTIONS} onChange={(value) => updateSetting("codexLogExporter", value)} />
+              <SettingSelect label="Traces" value={settings.codexTraceExporter} options={CODEX_EXPORTER_OPTIONS} onChange={(value) => updateSetting("codexTraceExporter", value)} />
+              <SettingSelect label="Metrics" value={settings.codexMetricsExporter} options={CODEX_METRICS_OPTIONS} onChange={(value) => updateSetting("codexMetricsExporter", value)} />
+            </div>
+            <div className="toggle-grid">
+              <SettingToggle label="프롬프트 본문 수집" checked={settings.codexLogUserPrompt} onChange={(value) => updateSetting("codexLogUserPrompt", value)} />
+            </div>
+          </div>
+        </Collapsible>
+      );
+    }
+
+    return null;
+  }
+
   async function copyText(text, successText, action = "") {
     try {
       if (navigator.clipboard?.writeText) {
@@ -358,6 +531,10 @@ function App() {
 
   async function copyCurrentScript() {
     await copyText(script, STATUS_TEXT.copied, "copy");
+  }
+
+  async function copyShareLink() {
+    await copyText(shareLink, "링크 복사 완료", "link");
   }
 
   async function copyCommand(command) {
@@ -396,6 +573,13 @@ function App() {
         <div className="actions">
           <Button
             className="action-button"
+            label={lastAction === "link" ? "링크 복사됨" : "링크 복사"}
+            icon={lastAction === "link" ? <Check size={17} /> : <Link size={17} />}
+            onClick={copyShareLink}
+            variant="secondary"
+          />
+          <Button
+            className="action-button"
             label={lastAction === "copy" ? "복사됨" : "복사"}
             icon={lastAction === "copy" ? <Check size={17} /> : <Copy size={17} />}
             onClick={copyCurrentScript}
@@ -412,7 +596,7 @@ function App() {
       </header>
 
       <div className="builder">
-        <section className="panel controls" aria-label="설치 항목 선택">
+        <Card className="panel controls" padding={0} role="region" aria-label="설치 항목 선택">
           <div className="section compact">
             <div className="section-title">
               <h2>운영체제</h2>
@@ -429,7 +613,7 @@ function App() {
             </div>
             <div className="selection-summary">
               <div>
-                <strong>{selectedCount}개 선택됨</strong>
+                <Badge variant="green" label={`${selectedCount}개 선택됨`} />
                 <span>선택한 항목만 설치 스크립트에 포함됩니다.</span>
               </div>
               <div className="selection-meter" aria-hidden="true">
@@ -449,20 +633,22 @@ function App() {
               const isCollapsed = collapsedGroups.has(group);
               return (
                 <div className="group" key={group}>
-                  <button
-                    type="button"
+                  <Button
                     className="group-head"
+                    label={`${GROUP_LABELS[group] || group} 카테고리 ${isCollapsed ? "펼치기" : "접기"}`}
                     aria-expanded={!isCollapsed}
                     aria-controls={groupDomId(group)}
-                    aria-label={`${GROUP_LABELS[group] || group} 카테고리 ${isCollapsed ? "펼치기" : "접기"}`}
                     onClick={() => toggleGroup(group)}
+                    variant="ghost"
+                    endContent={(
+                      <span className="group-head-meta">
+                        <Badge variant={groupSelected ? "green" : "neutral"} label={`${groupSelected}/${groupPackages.length}`} />
+                        <ChevronDown className="group-chevron" size={15} aria-hidden="true" />
+                      </span>
+                    )}
                   >
                     <h3>{GROUP_LABELS[group] || group}</h3>
-                    <span className="group-head-meta">
-                      <span>{groupSelected}/{groupPackages.length}</span>
-                      <ChevronDown className="group-chevron" size={15} aria-hidden="true" />
-                    </span>
-                  </button>
+                  </Button>
                   <div
                     id={groupDomId(group)}
                     className="group-body"
@@ -472,161 +658,87 @@ function App() {
                   >
                     <div className="group-body-inner">
                       {groupPackages.map((item) => (
-                        <CheckboxInput
-                          className={`package ${ADVANCED_PACKAGE_IDS.has(item.id) ? "package-advanced" : ""}`}
+                        <div
+                          className={`package-block ${ADVANCED_PACKAGE_IDS.has(item.id) ? "package-advanced" : ""}`}
                           key={item.id}
-                          label={packageLabel(item)}
-                          labelIcon={packageIcon(item.id)}
-                          description={packageNote(item)}
-                          value={selected.has(item.id)}
-                          onChange={() => togglePackage(item.id)}
-                          width="100%"
-                        />
+                        >
+                          <CheckboxInput
+                            className="package"
+                            label={packageLabel(item)}
+                            labelIcon={packageIcon(item.id)}
+                            description={packageNote(item)}
+                            value={selected.has(item.id)}
+                            onChange={() => togglePackage(item.id)}
+                            width="100%"
+                          />
+                          {packageSettings(item)}
+                        </div>
                       ))}
+                      {group === "Advanced" && showTelemetryDefaults ? (
+                        <Collapsible className="package-settings package-settings-common" trigger="수집 서버 연결" defaultIsOpen={false}>
+                          <div className="settings">
+                            <SettingTextInput
+                              htmlName="otelEndpoint"
+                              label="수집 서버 주소"
+                              value={settings.otelEndpoint}
+                              onChange={(value) => updateSetting("otelEndpoint", value)}
+                            />
+                            <div className="settings-grid">
+                              <SettingSelect
+                                label="전송 프로토콜"
+                                value={settings.otelProtocol}
+                                options={OTEL_PROTOCOL_OPTIONS}
+                                onChange={(value) => updateSetting("otelProtocol", value)}
+                              />
+                              <SettingTextInput
+                                htmlName="otelEnvironment"
+                                label="환경"
+                                value={settings.otelEnvironment}
+                                onChange={(value) => updateSetting("otelEnvironment", value)}
+                              />
+                              <SettingTextInput
+                                htmlName="otelHeaderName"
+                                label="헤더 이름"
+                                value={settings.otelHeaderName}
+                                onChange={(value) => updateSetting("otelHeaderName", value)}
+                              />
+                              <SettingTextInput
+                                htmlName="otelHeaderValue"
+                                label="헤더 값"
+                                value={settings.otelHeaderValue}
+                                onChange={(value) => updateSetting("otelHeaderValue", value)}
+                              />
+                              <SettingTextInput
+                                htmlName="otelMetricInterval"
+                                label="Metrics 주기(ms)"
+                                value={settings.otelMetricInterval}
+                                onChange={(value) => updateSetting("otelMetricInterval", value)}
+                                type="number"
+                              />
+                              <SettingTextInput
+                                htmlName="otelLogsInterval"
+                                label="Logs 주기(ms)"
+                                value={settings.otelLogsInterval}
+                                onChange={(value) => updateSetting("otelLogsInterval", value)}
+                                type="number"
+                              />
+                            </div>
+                            <SettingTextInput
+                              htmlName="otelResourceAttributes"
+                              label="리소스 속성"
+                              value={settings.otelResourceAttributes}
+                              onChange={(value) => updateSetting("otelResourceAttributes", value)}
+                              placeholder="team=platform,service.namespace=local"
+                            />
+                          </div>
+                        </Collapsible>
+                      ) : null}
                     </div>
                   </div>
                 </div>
               );
             })}
           </div>
-
-          {showGitDefaults ? (
-            <div className="section">
-              <div className="section-title">
-                <h2>Git 기본값</h2>
-              </div>
-              <div className="settings">
-                <TextInput
-                  htmlName="gitName"
-                  label="이름"
-                  value={settings.gitName}
-                  onChange={(gitName) => setSettings({ ...settings, gitName })}
-                  width="100%"
-                />
-                <TextInput
-                  htmlName="gitEmail"
-                  label="이메일"
-                  value={settings.gitEmail}
-                  onChange={(gitEmail) => setSettings({ ...settings, gitEmail })}
-                  type="email"
-                  width="100%"
-                />
-              </div>
-            </div>
-          ) : null}
-
-          {showTelemetryDefaults ? (
-            <div className="section config-section">
-              <div className="section-title">
-                <h2>관측 로그 설정</h2>
-                <span className="section-badge">고급</span>
-              </div>
-              <p className="section-help">
-                Claude Code 또는 Codex 관측 로그를 선택한 경우에만 적용됩니다. 프롬프트 본문은 기록하지 않습니다.
-              </p>
-              <div className="settings">
-                <TextInput
-                  htmlName="otelEndpoint"
-                  label="수집 서버 주소"
-                  value={settings.otelEndpoint}
-                  onChange={(otelEndpoint) => updateSetting("otelEndpoint", otelEndpoint)}
-                  width="100%"
-                />
-                <div className="settings-grid">
-                  <SettingSelect
-                    label="전송 프로토콜"
-                    value={settings.otelProtocol}
-                    options={OTEL_PROTOCOL_OPTIONS}
-                    onChange={(value) => updateSetting("otelProtocol", value)}
-                  />
-                  <TextInput
-                    htmlName="otelEnvironment"
-                    label="환경"
-                    value={settings.otelEnvironment}
-                    onChange={(value) => updateSetting("otelEnvironment", value)}
-                    width="100%"
-                  />
-                  <TextInput
-                    htmlName="otelHeaderName"
-                    label="헤더 이름"
-                    value={settings.otelHeaderName}
-                    onChange={(value) => updateSetting("otelHeaderName", value)}
-                    width="100%"
-                  />
-                  <TextInput
-                    htmlName="otelHeaderValue"
-                    label="헤더 값"
-                    value={settings.otelHeaderValue}
-                    onChange={(value) => updateSetting("otelHeaderValue", value)}
-                    width="100%"
-                  />
-                  <TextInput
-                    htmlName="otelMetricInterval"
-                    label="Metrics 주기(ms)"
-                    value={settings.otelMetricInterval}
-                    onChange={(value) => updateSetting("otelMetricInterval", value)}
-                    type="number"
-                    width="100%"
-                  />
-                  <TextInput
-                    htmlName="otelLogsInterval"
-                    label="Logs 주기(ms)"
-                    value={settings.otelLogsInterval}
-                    onChange={(value) => updateSetting("otelLogsInterval", value)}
-                    type="number"
-                    width="100%"
-                  />
-                </div>
-                <TextInput
-                  htmlName="otelResourceAttributes"
-                  label="리소스 속성"
-                  value={settings.otelResourceAttributes}
-                  onChange={(value) => updateSetting("otelResourceAttributes", value)}
-                  placeholder="team=platform,service.namespace=local"
-                  width="100%"
-                />
-                {resolved.has("claude-code-telemetry") ? (
-                  <div className="telemetry-card">
-                    <h3>Claude Code</h3>
-                    <div className="settings-grid">
-                      <SettingSelect label="Metrics" value={settings.claudeMetricsExporter} options={CLAUDE_METRICS_OPTIONS} onChange={(value) => updateSetting("claudeMetricsExporter", value)} />
-                      <SettingSelect label="Logs" value={settings.claudeLogsExporter} options={CLAUDE_LOG_OPTIONS} onChange={(value) => updateSetting("claudeLogsExporter", value)} />
-                      <SettingSelect label="Traces" value={settings.claudeTracesExporter} options={CLAUDE_TRACE_OPTIONS} onChange={(value) => updateSetting("claudeTracesExporter", value)} />
-                      <SettingSelect label="Raw API body" value={settings.claudeRawApiBodiesMode} options={RAW_BODY_OPTIONS} onChange={(value) => updateSetting("claudeRawApiBodiesMode", value)} />
-                    </div>
-                    {settings.claudeRawApiBodiesMode === "file" ? (
-                      <TextInput
-                        htmlName="claudeRawApiBodiesDir"
-                        label="Raw body 저장 경로"
-                        value={settings.claudeRawApiBodiesDir}
-                        onChange={(value) => updateSetting("claudeRawApiBodiesDir", value)}
-                        width="100%"
-                      />
-                    ) : null}
-                    <div className="toggle-grid">
-                      <SettingToggle label="프롬프트 본문 수집" checked={settings.claudeLogUserPrompts} onChange={(value) => updateSetting("claudeLogUserPrompts", value)} />
-                      <SettingToggle label="Assistant 응답 수집" checked={settings.claudeLogAssistantResponses} onChange={(value) => updateSetting("claudeLogAssistantResponses", value)} />
-                      <SettingToggle label="Tool 상세 수집" checked={settings.claudeLogToolDetails} onChange={(value) => updateSetting("claudeLogToolDetails", value)} />
-                      <SettingToggle label="Tool 입출력 내용 수집" checked={settings.claudeLogToolContent} onChange={(value) => updateSetting("claudeLogToolContent", value)} />
-                    </div>
-                  </div>
-                ) : null}
-                {resolved.has("codex-telemetry") ? (
-                  <div className="telemetry-card">
-                    <h3>Codex</h3>
-                    <div className="settings-grid">
-                      <SettingSelect label="Logs" value={settings.codexLogExporter} options={CODEX_EXPORTER_OPTIONS} onChange={(value) => updateSetting("codexLogExporter", value)} />
-                      <SettingSelect label="Traces" value={settings.codexTraceExporter} options={CODEX_EXPORTER_OPTIONS} onChange={(value) => updateSetting("codexTraceExporter", value)} />
-                      <SettingSelect label="Metrics" value={settings.codexMetricsExporter} options={CODEX_METRICS_OPTIONS} onChange={(value) => updateSetting("codexMetricsExporter", value)} />
-                    </div>
-                    <div className="toggle-grid">
-                      <SettingToggle label="프롬프트 본문 수집" checked={settings.codexLogUserPrompt} onChange={(value) => updateSetting("codexLogUserPrompt", value)} />
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
 
           <div className="section compact">
             <div className="section-title">
@@ -647,7 +759,7 @@ function App() {
                         onClick={() => copyCommand(item.command)}
                       >
                         <code>{item.command}</code>
-                        <span>
+                        <span className="command-copy-status">
                           {copiedCommand === item.command ? <Check size={13} /> : <Copy size={13} />}
                           {copiedCommand === item.command ? "복사됨" : "복사"}
                         </span>
@@ -658,9 +770,9 @@ function App() {
               ))}
             </ol>
           </div>
-        </section>
+        </Card>
 
-        <section className="panel preview" aria-label="생성된 설치 스크립트 미리보기">
+        <Card className="panel preview" padding={0} role="region" aria-label="생성된 설치 스크립트 미리보기">
           <div className="preview-head">
             <div className="preview-title">
               <FileDown size={18} />
@@ -677,6 +789,26 @@ function App() {
               </span>
             </div>
           </div>
+          <div className="terminal-install">
+            <div className="terminal-copy">
+              <span className="terminal-label">
+                <Terminal size={16} aria-hidden="true" />
+                {os === "mac" ? "macOS 터미널 설치" : "Windows 터미널 설치"}
+              </span>
+              <button
+                type="button"
+                className="command-copy terminal-command"
+                aria-label={`${os === "mac" ? "macOS" : "Windows"} 터미널 설치 명령어 복사`}
+                onClick={() => copyCommand(installCommand)}
+              >
+                <code title={installCommand}>{installCommand}</code>
+                <span className="command-copy-status">
+                  {copiedCommand === installCommand ? <Check size={13} /> : <Copy size={13} />}
+                  {copiedCommand === installCommand ? "복사됨" : "복사"}
+                </span>
+              </button>
+            </div>
+          </div>
           <TextArea
             className="script-textarea"
             label="생성된 설치 스크립트"
@@ -691,8 +823,14 @@ function App() {
             <span className={tools.length ? "" : "warning"}>{tools.length ? status : STATUS_TEXT.noTools}</span>
             <span>{added.length ? `자동 추가: ${added.join(", ")}` : ""}</span>
           </div>
-        </section>
+        </Card>
       </div>
+      <footer className="site-footer">
+        <a href="https://github.com/seungwonme" target="_blank" rel="noreferrer">
+          <SiGithub aria-hidden="true" />
+          만든 사람 Aiden
+        </a>
+      </footer>
     </main>
   );
 }
