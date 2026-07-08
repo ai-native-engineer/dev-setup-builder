@@ -23,6 +23,7 @@ test("builds scripts and captures primary states", async ({ page }) => {
   await expect(toolList.getByRole("checkbox", { name: /Git 사용자 정보 기본값/ })).toBeChecked();
   await expect(page.getByRole("button", { name: /고급 설정/ })).toHaveAttribute("aria-expanded", "false");
   const pageOrigin = new URL(page.url()).origin;
+  await page.context().grantPermissions(["clipboard-write"], { origin: pageOrigin });
   const macTerminalButton = page.getByRole("button", { name: "macOS 터미널 설치 명령어 복사" });
   await expect(macTerminalButton).toContainText("curl -fsSL");
   await expect(macTerminalButton).toContainText(`${pageOrigin}/dev-setup-builder/run-mac.sh`);
