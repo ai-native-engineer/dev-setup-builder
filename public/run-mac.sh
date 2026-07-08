@@ -12,4 +12,10 @@ if ! printf "%s" "$DEV_SETUP_SCRIPT_B64" | base64 -D > "$tmp" 2>/dev/null; then
 fi
 
 chmod +x "$tmp"
-bash "$tmp"
+# Reconnect stdin to the terminal: when invoked via `curl | bash`, stdin is the
+# consumed pipe, so Homebrew's installer (sudo password, prompts) could not read input.
+if [ -e /dev/tty ]; then
+  bash "$tmp" < /dev/tty
+else
+  bash "$tmp"
+fi
