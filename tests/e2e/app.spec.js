@@ -18,18 +18,6 @@ test("exposes Korean, read-only preview, and announced status", async ({ page })
   await expect.soft(page.locator(".status")).toHaveAttribute("aria-live", "polite");
 });
 
-test("keeps the fixed GitHub link clear of the script preview", async ({ page }) => {
-  for (const viewport of [{ width: 1280, height: 720 }, { width: 375, height: 812 }]) {
-    await page.setViewportSize(viewport);
-    await page.goto("./");
-
-    const linkBox = await page.getByRole("link", { name: "GitHub 저장소" }).boundingBox();
-    const previewBox = await page.getByRole("region", { name: "생성된 설치 스크립트 미리보기" }).boundingBox();
-
-    expect(linkBox.x).toBeGreaterThanOrEqual(previewBox.x + previewBox.width);
-  }
-});
-
 test("builds scripts and captures primary states", async ({ page }) => {
   await page.goto("./");
 

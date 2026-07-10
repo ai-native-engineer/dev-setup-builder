@@ -532,7 +532,6 @@ body {
   grid-template-rows: auto auto auto;
   position: sticky;
   top: 18px;
-  margin-right: calc(42px + max(18px, env(safe-area-inset-right)) - 18px);
 }
 
 .preview-head {
@@ -760,10 +759,6 @@ body {
 @media (max-width: 520px) {
   .builder {
     padding: 10px;
-  }
-
-  .preview {
-    margin-right: calc(42px + max(18px, env(safe-area-inset-right)) - 10px);
   }
 
   .topbar {
