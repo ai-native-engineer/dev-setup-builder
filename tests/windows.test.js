@@ -92,6 +92,12 @@ assert.doesNotMatch(codexScript, /\n\$Failed = @\(\)/);
 assert.match(codexScript, /\$env:CODEX_NON_INTERACTIVE = '1'/);
 assert.doesNotMatch(codexScript, /-Command "\$env:CODEX_NON_INTERACTIVE=1;/);
 
+// Refresh-Path preserves process-only tools before merging persisted PATH entries.
+assert.match(codexScript, /@\(\$env:Path, \$machine, \$user\) -split ';'/);
+assert.match(codexScript, /HashSet\[string\].*StringComparer\]::OrdinalIgnoreCase/);
+assert.match(codexScript, /Where-Object \{ \$_ -and \$seen\.Add\(\$_\) \}/);
+assert.doesNotMatch(codexScript, /\$env:Path = "\$machine;\$user"/);
+
 // Polyglot marker is split in the header and matched with IndexOf so a setting value cannot hijack extraction.
 assert.match(codexScript, /\$m='#__PS_SCRIPT'\+'_BELOW__'/);
 assert.match(codexScript, /\$raw\.IndexOf\(\$m\)/);

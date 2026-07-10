@@ -8,7 +8,6 @@ import { Collapsible } from "@astryxdesign/core/Collapsible";
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Selector } from "@astryxdesign/core/Selector";
 import { Switch } from "@astryxdesign/core/Switch";
-import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { AiFillOpenAI } from "react-icons/ai";
 import { FaApple, FaCode, FaGitAlt, FaUserGear, FaWindows } from "react-icons/fa6";
@@ -813,17 +812,16 @@ function App() {
               </button>
             </div>
           </div>
-          <TextArea
-            className="script-textarea"
-            label="생성된 설치 스크립트"
-            isLabelHidden
-            value={script}
-            onChange={() => {}}
-            rows={24}
-            hasSpellCheck={false}
-            width="100%"
-          />
-          <div className="status">
+          <div className="script-textarea">
+            <textarea
+              aria-label="생성된 설치 스크립트"
+              value={script}
+              readOnly
+              rows={24}
+              spellCheck={false}
+            />
+          </div>
+          <div className="status" role="status" aria-live="polite">
             <span className={tools.length ? "" : "warning"}>{tools.length ? status : STATUS_TEXT.noTools}</span>
             <span>{added.length ? `자동 추가: ${added.join(", ")}` : ""}</span>
           </div>

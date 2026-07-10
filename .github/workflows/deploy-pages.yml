@@ -1,6 +1,7 @@
 name: Deploy Pages
 
 on:
+  pull_request:
   push:
     branches:
       - main
@@ -8,18 +9,13 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,10 +36,44 @@ jobs:
           name: e2e-screenshots
           path: test-results/screenshots
           if-no-files-found: warn
-      - run: pnpm build
-      - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
+        if: github.event_name != 'pull_request'
         with:
           path: dist
+
+  runner-fixture:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run safe macOS runner fixture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          fixture=$'#!/bin/bash\nprintf "runner fixture ok\\n"\n'
+          DEV_SETUP_SCRIPT_B64="$(printf '%s' "$fixture" | base64 | tr -d '\n')" bash public/run-mac.sh
+      - name: Run safe Windows runner fixture
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $fixture = "@echo off`r`necho runner fixture ok`r`nexit /b 0`r`n"
+          $env:DEV_SETUP_SCRIPT_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($fixture))
+          & ./public/run-windows.ps1
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: [verify, runner-fixture]
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/configure-pages@v5
       - id: deployment
         uses: actions/deploy-pages@v4

@@ -12,9 +12,8 @@ export default defineConfig({
     ...(process.env.CI ? {} : { channel: "chrome" })
   },
   webServer: {
-    command: "pnpm dev --host 127.0.0.1",
+    command: "pnpm preview --host 127.0.0.1 --port 5173",
     url: "http://127.0.0.1:5173/dev-setup-builder/",
-    reuseExistingServer: !process.env.CI,
     timeout: 120000
   }
 });

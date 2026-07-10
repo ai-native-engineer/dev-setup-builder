@@ -9,6 +9,32 @@ test.beforeAll(() => {
   mkdirSync(screenshotDir, { recursive: true });
 });
 
+test("exposes Korean, read-only preview, and announced status", async ({ page }) => {
+  await page.goto("./");
+
+  await expect.soft(page.locator("html")).toHaveAttribute("lang", "ko");
+  await expect.soft(page.getByRole("textbox", { name: "생성된 설치 스크립트" })).toHaveAttribute("readonly", "");
+  await expect.soft(page.locator(".status")).toHaveAttribute("role", "status");
+  await expect.soft(page.locator(".status")).toHaveAttribute("aria-live", "polite");
+});
+
+test("keeps the fixed GitHub link outside the content panels", async ({ page }) => {
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 375, height: 812 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto("./");
+
+    const linkBox = await page.getByRole("link", { name: "GitHub 저장소" }).boundingBox();
+    const panelBoxes = await page.locator(".panel").evaluateAll((panels) =>
+      panels.map((panel) => {
+        const { x, width } = panel.getBoundingClientRect();
+        return { x, width };
+      }),
+    );
+
+    expect(linkBox.x).toBeGreaterThanOrEqual(Math.max(...panelBoxes.map(({ x, width }) => x + width)));
+  }
+});
+
 test("builds scripts and captures primary states", async ({ page }) => {
   await page.goto("./");
 
