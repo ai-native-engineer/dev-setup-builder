@@ -13,6 +13,8 @@ test("exposes Korean, read-only preview, and announced status", async ({ page })
   await page.goto("./");
 
   await expect.soft(page.locator("html")).toHaveAttribute("lang", "ko");
+  await expect.soft(page.getByRole("link", { name: "미리보기로 건너뛰기" })).toHaveAttribute("href", "#script-preview");
+  await expect.soft(page.locator("#script-preview")).toHaveAttribute("aria-label", "생성된 설치 스크립트 미리보기");
   await expect.soft(page.getByRole("textbox", { name: "생성된 설치 스크립트" })).toHaveAttribute("readonly", "");
   await expect.soft(page.locator(".status")).toHaveAttribute("role", "status");
   await expect.soft(page.locator(".status")).toHaveAttribute("aria-live", "polite");
@@ -29,7 +31,7 @@ test("builds scripts and captures primary states", async ({ page }) => {
   await expect(toolList.getByRole("checkbox")).toHaveCount(18);
   await expect(toolList.getByRole("checkbox", { name: /Bun/ })).toBeChecked();
   await expect(toolList.getByRole("checkbox", { name: /Codex App/ })).toBeChecked();
-  await expect(toolList.getByRole("checkbox", { name: /Git 사용자 정보 기본값/ })).toBeChecked();
+  await expect(toolList.getByRole("checkbox", { name: /Git 사용자 정보 기본값/ })).not.toBeChecked();
   await expect(page.getByRole("button", { name: /고급 설정/ })).toHaveAttribute("aria-expanded", "false");
   const pageOrigin = new URL(page.url()).origin;
   await page.context().grantPermissions(["clipboard-write"], { origin: pageOrigin });
@@ -48,6 +50,7 @@ test("builds scripts and captures primary states", async ({ page }) => {
   await page.getByRole("button", { name: "전체 선택" }).click();
   await expect(toolList.getByRole("checkbox", { name: /Claude Code 관측 로그/ })).not.toBeChecked();
   await expect(toolList.getByRole("checkbox", { name: /Codex 관측 로그/ })).not.toBeChecked();
+  await expect(toolList.getByRole("checkbox", { name: /Git 사용자 정보 기본값/ })).not.toBeChecked();
   await toolList.getByRole("checkbox", { name: /Claude Code 관측 로그/ }).click();
   await toolList.getByRole("checkbox", { name: /Codex 관측 로그/ }).click();
   await page.getByText("수집 서버 연결").click();
@@ -104,33 +107,92 @@ test("builds scripts and captures primary states", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("./");
   await expect(page.getByRole("heading", { name: "개발 환경 설치 도우미" })).toBeVisible();
+  await expect(page.locator(".site-footer")).toHaveCSS("position", "static");
   await page.screenshot({ path: join(screenshotDir, "mobile-mac.png"), fullPage: true });
 });
 
-test("syncs selected options and settings through query params", async ({ page }) => {
+test("keeps sensitive settings out of shared URLs and exposes shared telemetry", async ({ page }) => {
+  const sensitive = {
+    gitName: "Aiden Student",
+    gitEmail: "aiden@example.com",
+    otelEndpoint: "https://collector.example.com",
+    otelEnvironment: "customer-prod",
+    otelHeaderName: "Authorization",
+    otelHeaderValue: "secret-token",
+    otelResourceAttributes: "team=secret",
+    claudeLogUserPrompts: "1",
+    claudeLogAssistantResponses: "1",
+    claudeLogToolDetails: "1",
+    claudeLogToolContent: "1",
+    claudeRawApiBodiesMode: "inline",
+    claudeRawApiBodiesDir: "/private/bodies",
+    codexLogUserPrompt: "1"
+  };
+  const params = new URLSearchParams({
+    os: "mac",
+    tools: "git,git-config,claude-code-telemetry,codex-telemetry",
+    ...sensitive
+  });
+
+  await page.goto(`./?${params}`);
+
+  await expect(page.getByRole("button", { name: /고급 설정/ })).toHaveAttribute("aria-expanded", "true");
+  await page.getByText("Git 기본값 수정").click();
+  await expect(page.getByRole("textbox", { name: "이름", exact: true })).toHaveValue("");
+  await expect(page.getByRole("textbox", { name: "이메일", exact: true })).toHaveValue("");
+
+  await page.getByText("수집 서버 연결").click();
+  await expect(page.getByRole("textbox", { name: "수집 서버 주소" })).toHaveValue("http://localhost:4317");
+  await expect(page.getByRole("textbox", { name: "리소스 속성" })).toHaveValue("");
+  const headerValue = page.getByRole("textbox", { name: "헤더 값" });
+  await expect(headerValue).toHaveAttribute("type", "password");
+  await expect(headerValue).toHaveAttribute("autocomplete", "off");
+
+  await page.getByText("Claude Code 세부 설정").click();
+  await page.getByText("Codex 세부 설정").click();
+  const promptBodyToggles = page.getByRole("switch", { name: "프롬프트 본문 수집" });
+  await expect(promptBodyToggles).toHaveCount(2);
+  await expect(promptBodyToggles.first()).not.toBeChecked();
+  await expect(promptBodyToggles.last()).not.toBeChecked();
+  await promptBodyToggles.first().click();
+
+  await expect.poll(() => {
+    const current = new URL(page.url()).searchParams;
+    return Object.keys(sensitive).filter((key) => current.has(key));
+  }).toEqual([]);
+});
+
+test("blocks generated output when selection or Git identity is invalid", async ({ page }) => {
   await page.goto("./");
 
   const toolList = page.getByLabel("설치할 도구");
-  await toolList.getByRole("checkbox", { name: /Bun/ }).click();
+  const copyButton = page.getByRole("button", { name: "복사", exact: true });
+  const downloadButton = page.getByRole("button", { name: "다운로드", exact: true });
+  const terminalButton = page.getByRole("button", { name: "macOS 터미널 설치 명령어 복사" });
+  const scriptPreview = page.getByRole("textbox", { name: "생성된 설치 스크립트" });
+
+  await page.getByRole("button", { name: "전체 해제" }).click();
+  await expect(copyButton).toBeDisabled();
+  await expect(downloadButton).toBeDisabled();
+  await expect(terminalButton).toBeDisabled();
+  await expect(page.getByText("도구를 하나 이상 선택하세요.")).toBeVisible();
+
+  await toolList.getByRole("checkbox", { name: /Git 사용자 정보 기본값/ }).click();
   await page.getByText("Git 기본값 수정").click();
+  await expect(copyButton).toBeDisabled();
+  await expect(downloadButton).toBeDisabled();
+  await expect(terminalButton).toBeDisabled();
+  await expect(page.getByText("Git 이름과 올바른 이메일을 입력하세요.")).toBeVisible();
+  await expect(scriptPreview).not.toHaveValue(/configure_git '' ''/);
+
   await page.getByRole("textbox", { name: "이름", exact: true }).fill("Aiden Student");
+  await page.getByRole("textbox", { name: "이메일", exact: true }).fill("not-an-email");
+  await expect(copyButton).toBeDisabled();
   await page.getByRole("textbox", { name: "이메일", exact: true }).fill("aiden@example.com");
-
-  await expect.poll(() => new URL(page.url()).searchParams.get("gitName")).toBe("Aiden Student");
-  const currentUrl = new URL(page.url());
-  const tools = currentUrl.searchParams.get("tools").split(",");
-
-  expect(currentUrl.searchParams.get("os")).toBe("mac");
-  expect(tools).toContain("git-config");
-  expect(tools).not.toContain("bun");
-  expect(currentUrl.searchParams.get("gitEmail")).toBe("aiden@example.com");
-
-  await page.goto(`./${currentUrl.search}`);
-  await expect(page.getByRole("radio", { name: "macOS" })).toHaveAttribute("aria-checked", "true");
-  await expect(toolList.getByRole("checkbox", { name: /Bun/ })).not.toBeChecked();
-  await page.getByText("Git 기본값 수정").click();
-  await expect(page.getByRole("textbox", { name: "이름", exact: true })).toHaveValue("Aiden Student");
-  await expect(page.getByRole("textbox", { name: "이메일", exact: true })).toHaveValue("aiden@example.com");
+  await expect(copyButton).toBeEnabled();
+  await expect(downloadButton).toBeEnabled();
+  await expect(terminalButton).toBeEnabled();
+  await expect(scriptPreview).toHaveValue(/configure_git 'Aiden Student' 'aiden@example.com'/);
 });
 
 test("enables WSL2 by default when switching from macOS to Windows", async ({ page }) => {

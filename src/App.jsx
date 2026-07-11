@@ -36,8 +36,8 @@ import {
 } from "./builder.js";
 
 const DEFAULT_SETTINGS = {
-  gitName: "Claude Code",
-  gitEmail: "noreply@anthropic.com",
+  gitName: "",
+  gitEmail: "",
   otelEndpoint: "http://localhost:4317",
   otelProtocol: "grpc",
   otelHeaderName: "",
@@ -105,7 +105,7 @@ const RAW_BODY_OPTIONS = [
 
 const STATUS_TEXT = {
   ready: "준비됨",
-  noTools: "선택된 도구 없음",
+  noTools: "도구를 하나 이상 선택하세요.",
   copied: "복사 완료",
   copyFailed: "복사 실패"
 };
@@ -169,9 +169,19 @@ const PACKAGE_ICONS = {
 
 const ADVANCED_PACKAGE_IDS = new Set(["claude-code-telemetry", "codex-telemetry"]);
 const PACKAGE_IDS = new Set(PACKAGES.map((item) => item.id));
-// Keep secrets (the OTLP header value is typically an API token) out of the shareable URL.
-const URL_SECRET_KEYS = new Set(["otelHeaderValue"]);
-const URL_SETTING_KEYS = Object.keys(DEFAULT_SETTINGS).filter((key) => !URL_SECRET_KEYS.has(key));
+// Share only non-identifying configuration. New settings stay private unless explicitly added here.
+const URL_SETTING_KEYS = [
+  "otelProtocol",
+  "otelMetricInterval",
+  "otelLogsInterval",
+  "claudeMetricsExporter",
+  "claudeLogsExporter",
+  "claudeTracesExporter",
+  "codexLogExporter",
+  "codexTraceExporter",
+  "codexMetricsExporter"
+];
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const PERMISSION_HELP = {
   mac: [
@@ -273,7 +283,7 @@ function SettingTextInput(props) {
 }
 
 function allSelection() {
-  return new Set(PACKAGES.filter((item) => !ADVANCED_PACKAGE_IDS.has(item.id)).map((item) => item.id));
+  return new Set(PACKAGES.filter((item) => !ADVANCED_PACKAGE_IDS.has(item.id) && item.id !== "git-config").map((item) => item.id));
 }
 
 function parseUrlState() {
@@ -374,7 +384,9 @@ function App() {
   const [status, setStatus] = useState(STATUS_TEXT.ready);
   const [lastAction, setLastAction] = useState("");
   const [copiedCommand, setCopiedCommand] = useState("");
-  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set(["Advanced"]));
+  const [collapsedGroups, setCollapsedGroups] = useState(() => (
+    [...ADVANCED_PACKAGE_IDS].some((id) => initialUrlState.current.selected.has(id)) ? new Set() : new Set(["Advanced"])
+  ));
   const statusTimer = useRef();
   const commandTimer = useRef();
 
@@ -390,6 +402,13 @@ function App() {
   const tools = visibleResolved(resolved);
   const currentFileName = fileName(os);
   const showTelemetryDefaults = resolved.has("claude-code-telemetry") || resolved.has("codex-telemetry");
+  const gitIdentityValid = Boolean(settings.gitName.trim() && EMAIL_PATTERN.test(settings.gitEmail.trim()));
+  const outputBlockReason = tools.length === 0
+    ? STATUS_TEXT.noTools
+    : resolved.has("git-config") && !gitIdentityValid
+      ? "Git 이름과 올바른 이메일을 입력하세요."
+      : "";
+  const canExport = !outputBlockReason;
 
   useEffect(() => {
     window.history.replaceState(null, "", `${window.location.pathname}?${urlSearch(os, selected, settings)}`);
@@ -533,6 +552,7 @@ function App() {
   }
 
   async function copyCurrentScript() {
+    if (!canExport) return;
     await copyText(script, STATUS_TEXT.copied, "copy");
   }
 
@@ -556,6 +576,7 @@ function App() {
   }
 
   function downloadCurrentScript() {
+    if (!canExport) return;
     const blob = new Blob([script], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -568,6 +589,7 @@ function App() {
 
   return (
     <main className="app">
+      <a className="skip-link" href="#script-preview">미리보기로 건너뛰기</a>
       <header className="topbar">
         <div className="brand">
           <h1>개발 환경 설치 도우미</h1>
@@ -586,6 +608,7 @@ function App() {
             label={lastAction === "copy" ? "복사됨" : "복사"}
             icon={lastAction === "copy" ? <Check size={17} /> : <Copy size={17} />}
             onClick={copyCurrentScript}
+            isDisabled={!canExport}
             variant="secondary"
           />
           <Button
@@ -593,6 +616,7 @@ function App() {
             label={lastAction === "download" ? "다운로드됨" : "다운로드"}
             icon={lastAction === "download" ? <Check size={17} /> : <Download size={17} />}
             onClick={downloadCurrentScript}
+            isDisabled={!canExport}
             variant="primary"
           />
         </div>
@@ -710,6 +734,8 @@ function App() {
                                 label="헤더 값"
                                 value={settings.otelHeaderValue}
                                 onChange={(value) => updateSetting("otelHeaderValue", value)}
+                                type="password"
+                                autoComplete="off"
                               />
                               <SettingTextInput
                                 htmlName="otelMetricInterval"
@@ -775,7 +801,7 @@ function App() {
           </div>
         </Card>
 
-        <Card className="panel preview" padding={0} role="region" aria-label="생성된 설치 스크립트 미리보기">
+        <Card id="script-preview" tabIndex={-1} className="panel preview" padding={0} role="region" aria-label="생성된 설치 스크립트 미리보기">
           <div className="preview-head">
             <div className="preview-title">
               <FileDown size={18} />
@@ -803,6 +829,7 @@ function App() {
                 className="command-copy terminal-command"
                 aria-label={`${os === "mac" ? "macOS" : "Windows"} 터미널 설치 명령어 복사`}
                 onClick={() => copyCommand(installCommand)}
+                disabled={!canExport}
               >
                 <code title={installCommand}>{installCommand}</code>
                 <span className="command-copy-status">
@@ -822,7 +849,7 @@ function App() {
             />
           </div>
           <div className="status" role="status" aria-live="polite">
-            <span className={tools.length ? "" : "warning"}>{tools.length ? status : STATUS_TEXT.noTools}</span>
+            <span className={outputBlockReason ? "warning" : ""}>{outputBlockReason || status}</span>
             <span>{added.length ? `자동 추가: ${added.join(", ")}` : ""}</span>
           </div>
         </Card>

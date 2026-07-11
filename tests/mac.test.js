@@ -54,7 +54,8 @@ const macPackages = PACKAGES.filter((item) => supportsOs(item, "mac"));
 assert.equal(macPackages.some((item) => item.id === "wsl2"), false);
 
 const dockerScript = buildMacScript(new Set(["homebrew", "docker"]), settings);
-assert.match(dockerScript, /brew_cask "Docker Desktop" "docker"/);
+assert.match(dockerScript, /brew_cask "Docker Desktop" "docker" "Docker\.app" ""/);
+assert.match(dockerScript, /brew list --cask "\$1"/);
 
 const claudeTelemetry = resolveSelection(new Set(["claude-code-telemetry"]), "mac");
 const claudeTelemetryScript = buildMacScript(claudeTelemetry, {
@@ -108,6 +109,15 @@ assert.match(claudeTelemetryScript, /chmod 600 "\$telemetry_file"/);
 const gitScript = buildMacScript(resolveSelection(new Set(["git-config"]), "mac"), settings);
 assert.match(gitScript, /\[ -z "\$existing_name" \] && git config --global user\.name/);
 assert.match(gitScript, /\[ -z "\$existing_email" \] && git config --global user\.email/);
+
+// Invalid or incomplete identity must not generate a global git config call.
+for (const invalidSettings of [
+  { gitName: "", gitEmail: "a@example.com" },
+  { gitName: "A", gitEmail: "not-an-email" }
+]) {
+  const invalidGitScript = buildMacScript(resolveSelection(new Set(["git-config"]), "mac"), invalidSettings);
+  assert.doesNotMatch(invalidGitScript, /^configure_git /m);
+}
 
 // CR/LF is stripped from telemetry values (TOML/script-line breakout guard).
 const crlfScript = buildMacScript(resolveSelection(new Set(["claude-code-telemetry"]), "mac"), {

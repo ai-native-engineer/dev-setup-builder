@@ -73,7 +73,7 @@ export const PACKAGES = [
     note: "Container runtime. May require first launch or restart after install.",
     presets: [],
     deps: { mac: ["homebrew"], win: [] },
-    mac: () => ['brew_cask "Docker Desktop" "docker" "Docker.app" "docker"'],
+    mac: () => ['brew_cask "Docker Desktop" "docker" "Docker.app" ""'],
     win: () => ["Install-DockerDesktop"]
   },
   {
@@ -213,12 +213,14 @@ export const PACKAGES = [
     note: "Writes name and email only when both are missing.",
     presets: [],
     deps: { mac: ["git"], win: ["git"] },
-    mac: (settings) => [
-      `configure_git ${sh(settings.gitName)} ${sh(settings.gitEmail)}`
-    ],
-    win: (settings) => [
-      `Set-GitDefaults -Name ${ps(settings.gitName)} -Email ${ps(settings.gitEmail)}`
-    ]
+    mac: (settings) => {
+      const identity = gitIdentity(settings);
+      return identity ? [`configure_git ${sh(identity.name)} ${sh(identity.email)}`] : [];
+    },
+    win: (settings) => {
+      const identity = gitIdentity(settings);
+      return identity ? [`Set-GitDefaults -Name ${ps(identity.name)} -Email ${ps(identity.email)}`] : [];
+    }
   }
 ];
 
@@ -259,6 +261,12 @@ function sh(value) {
 
 function ps(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function gitIdentity(settings) {
+  const name = String(settings?.gitName || "").trim();
+  const email = String(settings?.gitEmail || "").trim();
+  return name && /^[^\s@]+@[^\s@]+$/.test(email) ? { name, email } : null;
 }
 
 function boolSetting(settings, key) {
@@ -420,16 +428,20 @@ export function buildMacScript(resolved, settings) {
     '  [ -n "$1" ] && { [ -d "/Applications/$1" ] || [ -d "$HOME/Applications/$1" ]; }',
     "}",
     "",
+    "cask_installed() {",
+    '  [ -n "$1" ] && has brew && brew list --cask "$1" >/dev/null 2>&1',
+    "}",
+    "",
     "brew_cask() {",
     '  label="$1"; cask="$2"; app_name="$3"; command_name="$4"',
     '  info "$label"',
     '  [ -n "$command_name" ] && has "$command_name" && { ok "$label installed"; return 0; }',
-    '  app_exists "$app_name" && { ok "$label installed"; return 0; }',
+    '  { app_exists "$app_name" || cask_installed "$cask"; } && { ok "$label installed"; return 0; }',
     '  if ! has brew; then fail "$label (Homebrew missing)"; return 1; fi',
     "  # Homebrew cask docs: https://docs.brew.sh/Cask-Cookbook",
     '  brew install --cask "$cask" >> "$LOG" 2>&1',
     "  refresh_path",
-    '  if { [ -n "$command_name" ] && has "$command_name"; } || app_exists "$app_name"; then ok "$label installed"; else fail "$label"; fi',
+    '  if { [ -n "$command_name" ] && has "$command_name"; } || app_exists "$app_name" || cask_installed "$cask"; then ok "$label installed"; else fail "$label"; fi',
     "}",
     "",
     "npm_global() {",
@@ -683,7 +695,15 @@ export function buildWindowsScript(resolved, settings) {
     "function Warn([string]$Text) { Write-Host \"  WARN: $Text\" }",
     "function Fail([string]$Text) { Write-Host \"  FAIL: $Text\"; $script:Failed += $Text }",
     "function Step([string]$Text) { Write-Host \"\"; Write-Host \"[$Text]\" }",
-    "function Has-Command([string]$Name) { return [bool](Get-Command $Name -ErrorAction SilentlyContinue) }",
+    "function Has-Command([string]$Name) {",
+    "  $commands = @(Get-Command $Name -All -ErrorAction SilentlyContinue)",
+    "  if ($Name -ne 'python') { return $commands.Count -gt 0 }",
+    "  foreach ($command in $commands) {",
+    "    if (-not $command.Source -or $command.Source -like '*\\WindowsApps\\*' -or -not (Test-Path $command.Source -PathType Leaf)) { continue }",
+    "    try { & $command.Source --version *> $null; if ($LASTEXITCODE -eq 0) { return $true } } catch {}",
+    "  }",
+    "  return $false",
+    "}",
     "",
     "function Refresh-Path {",
     "  $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')",
@@ -814,12 +834,7 @@ export function buildWindowsScript(resolved, settings) {
     "}",
     "",
     "function Test-DockerDesktop {",
-    "  if (Has-Command 'docker') { return $true }",
-    "  foreach ($p in @(",
-    "    (Join-Path $env:ProgramFiles 'Docker\\Docker\\Docker Desktop.exe'),",
-    "    (Join-Path $env:ProgramFiles 'Docker\\Docker\\resources\\bin\\docker.exe')",
-    "  )) { if ($p -and (Test-Path $p)) { return $true } }",
-    "  return $false",
+    "  return [bool](Test-Path (Join-Path $env:ProgramFiles 'Docker\\Docker\\Docker Desktop.exe'))",
     "}",
     "",
     "function Install-DockerDesktop {",
@@ -951,30 +966,31 @@ export function buildWindowsScript(resolved, settings) {
     "  Step 'Codex CLI telemetry'",
     "  $dir = Join-Path $env:USERPROFILE '.codex'",
     "  $config = Join-Path $dir 'config.toml'",
-    "  New-Item -ItemType Directory -Path $dir -Force | Out-Null",
-    "  if (-not (Test-Path $config)) { New-Item -ItemType File -Path $config -Force | Out-Null }",
     "  $start = '# Dev Setup Builder - Codex telemetry start'",
     "  $end = '# Dev Setup Builder - Codex telemetry end'",
-    "  $content = Get-Content -Path $config -Raw -ErrorAction SilentlyContinue",
-    "  $clean = [regex]::Replace($content, \"(?ms)^$([regex]::Escape($start))\\r?\\n.*?^$([regex]::Escape($end))\\r?\\n?\", '')",
-    "  if ($clean -match '(?m)^\\[otel\\]') { Warn 'Codex [otel] already exists outside Dev Setup Builder block; leaving it unchanged'; return }",
-    "  $safeEnvironment = ConvertTo-TomlString $Environment",
-    "  $logPrompt = if ($CodexLogUserPrompt -eq '1') { 'true' } else { 'false' }",
-    "  $logExporterToml = ConvertTo-CodexExporterToml $CodexLogExporter $Endpoint $Protocol $HeaderName $HeaderValue",
-    "  $traceExporterToml = ConvertTo-CodexExporterToml $CodexTraceExporter $Endpoint $Protocol $HeaderName $HeaderValue",
-    "  $metricsExporterToml = ConvertTo-CodexExporterToml $CodexMetricsExporter $Endpoint $Protocol $HeaderName $HeaderValue",
-    "  $block = @(",
-    "    $start",
-    "    '[otel]'",
-    "    \"environment = `\"$safeEnvironment`\"\"",
-    "    \"log_user_prompt = $logPrompt\"",
-    "    \"exporter = $logExporterToml\"",
-    "    \"trace_exporter = $traceExporterToml\"",
-    "    \"metrics_exporter = $metricsExporterToml\"",
-    "    $end",
-    "    ''",
-    "  )",
-    "  [IO.File]::WriteAllText($config, ($clean.TrimEnd() + \"`r`n`r`n\" + ($block -join \"`r`n\")), [Text.UTF8Encoding]::new($false))",
+    "  try {",
+    "    New-Item -ItemType Directory -Path $dir -Force -ErrorAction Stop | Out-Null",
+    "    $content = if (Test-Path $config) { [IO.File]::ReadAllText($config, [Text.UTF8Encoding]::new($false)) } else { '' }",
+    "    $clean = [regex]::Replace($content, \"(?ms)^$([regex]::Escape($start))\\r?\\n.*?^$([regex]::Escape($end))\\r?\\n?\", '')",
+    "    if ($clean -match '(?m)^\\[otel\\]') { Warn 'Codex [otel] already exists outside Dev Setup Builder block; leaving it unchanged'; return }",
+    "    $safeEnvironment = ConvertTo-TomlString $Environment",
+    "    $logPrompt = if ($CodexLogUserPrompt -eq '1') { 'true' } else { 'false' }",
+    "    $logExporterToml = ConvertTo-CodexExporterToml $CodexLogExporter $Endpoint $Protocol $HeaderName $HeaderValue",
+    "    $traceExporterToml = ConvertTo-CodexExporterToml $CodexTraceExporter $Endpoint $Protocol $HeaderName $HeaderValue",
+    "    $metricsExporterToml = ConvertTo-CodexExporterToml $CodexMetricsExporter $Endpoint $Protocol $HeaderName $HeaderValue",
+    "    $block = @(",
+    "      $start",
+    "      '[otel]'",
+    "      \"environment = `\"$safeEnvironment`\"\"",
+    "      \"log_user_prompt = $logPrompt\"",
+    "      \"exporter = $logExporterToml\"",
+    "      \"trace_exporter = $traceExporterToml\"",
+    "      \"metrics_exporter = $metricsExporterToml\"",
+    "      $end",
+    "      ''",
+    "    )",
+    "    [IO.File]::WriteAllText($config, ($clean.TrimEnd() + \"`r`n`r`n\" + ($block -join \"`r`n\")), [Text.UTF8Encoding]::new($false))",
+    "  } catch { Fail \"Codex telemetry ($($_.Exception.Message))\"; return }",
     "  Ok 'Codex telemetry configured'",
     "}",
     "",

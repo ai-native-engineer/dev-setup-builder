@@ -38,6 +38,22 @@ body {
   grid-template-rows: auto 1fr auto;
 }
 
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 30;
+  transform: translateY(-200%);
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: #ffffff;
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -772,5 +788,11 @@ body {
   .preview-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .site-footer {
+    position: static;
+    justify-self: end;
+    margin: 0 14px 14px;
   }
 }
