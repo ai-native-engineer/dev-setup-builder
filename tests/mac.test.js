@@ -54,7 +54,8 @@ const macPackages = PACKAGES.filter((item) => supportsOs(item, "mac"));
 assert.equal(macPackages.some((item) => item.id === "wsl2"), false);
 
 const dockerScript = buildMacScript(new Set(["homebrew", "docker"]), settings);
-assert.match(dockerScript, /brew_cask "Docker Desktop" "docker"/);
+assert.match(dockerScript, /brew_cask "Docker Desktop" "docker" "Docker\.app" ""/);
+assert.match(dockerScript, /brew list --cask "\$1"/);
 
 const claudeTelemetry = resolveSelection(new Set(["claude-code-telemetry"]), "mac");
 const claudeTelemetryScript = buildMacScript(claudeTelemetry, {

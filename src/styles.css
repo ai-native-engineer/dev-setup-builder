@@ -773,4 +773,10 @@ body {
     align-items: flex-start;
     flex-direction: column;
   }
+
+  .site-footer {
+    position: static;
+    justify-self: end;
+    margin: 0 14px 14px;
+  }
 }

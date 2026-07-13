@@ -105,7 +105,7 @@ const RAW_BODY_OPTIONS = [
 
 const STATUS_TEXT = {
   ready: "준비됨",
-  noTools: "선택된 도구 없음",
+  noTools: "도구를 하나 이상 선택하세요.",
   copied: "복사 완료",
   copyFailed: "복사 실패"
 };
@@ -140,7 +140,7 @@ const PACKAGE_TEXT = {
   gh: { note: "GitHub 작업용 gh 명령을 설치합니다." },
   "github-auth": { label: "GitHub CLI 로그인", note: "GitHub CLI 로그인 상태를 확인하고 필요한 명령을 안내합니다." },
   glab: { note: "GitLab 작업용 glab 명령을 설치합니다." },
-  "git-config": { label: "Git 사용자 정보 기본값", note: "Git 이름과 이메일이 없을 때만 기본값을 설정합니다." }
+  "git-config": { label: "Git 사용자 정보 기본값", note: "Git 정보가 없을 때 Claude Code / noreply@anthropic.com을 사용합니다." }
 };
 
 const PACKAGE_ICONS = {
@@ -169,9 +169,7 @@ const PACKAGE_ICONS = {
 
 const ADVANCED_PACKAGE_IDS = new Set(["claude-code-telemetry", "codex-telemetry"]);
 const PACKAGE_IDS = new Set(PACKAGES.map((item) => item.id));
-// Keep secrets (the OTLP header value is typically an API token) out of the shareable URL.
-const URL_SECRET_KEYS = new Set(["otelHeaderValue"]);
-const URL_SETTING_KEYS = Object.keys(DEFAULT_SETTINGS).filter((key) => !URL_SECRET_KEYS.has(key));
+const URL_SETTING_KEYS = Object.keys(DEFAULT_SETTINGS);
 
 const PERMISSION_HELP = {
   mac: [
@@ -390,6 +388,8 @@ function App() {
   const tools = visibleResolved(resolved);
   const currentFileName = fileName(os);
   const showTelemetryDefaults = resolved.has("claude-code-telemetry") || resolved.has("codex-telemetry");
+  const outputBlockReason = tools.length === 0 ? STATUS_TEXT.noTools : "";
+  const canExport = !outputBlockReason;
 
   useEffect(() => {
     window.history.replaceState(null, "", `${window.location.pathname}?${urlSearch(os, selected, settings)}`);
@@ -533,6 +533,7 @@ function App() {
   }
 
   async function copyCurrentScript() {
+    if (!canExport) return;
     await copyText(script, STATUS_TEXT.copied, "copy");
   }
 
@@ -556,6 +557,7 @@ function App() {
   }
 
   function downloadCurrentScript() {
+    if (!canExport) return;
     const blob = new Blob([script], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -586,6 +588,7 @@ function App() {
             label={lastAction === "copy" ? "복사됨" : "복사"}
             icon={lastAction === "copy" ? <Check size={17} /> : <Copy size={17} />}
             onClick={copyCurrentScript}
+            isDisabled={!canExport}
             variant="secondary"
           />
           <Button
@@ -593,6 +596,7 @@ function App() {
             label={lastAction === "download" ? "다운로드됨" : "다운로드"}
             icon={lastAction === "download" ? <Check size={17} /> : <Download size={17} />}
             onClick={downloadCurrentScript}
+            isDisabled={!canExport}
             variant="primary"
           />
         </div>
@@ -803,6 +807,7 @@ function App() {
                 className="command-copy terminal-command"
                 aria-label={`${os === "mac" ? "macOS" : "Windows"} 터미널 설치 명령어 복사`}
                 onClick={() => copyCommand(installCommand)}
+                disabled={!canExport}
               >
                 <code title={installCommand}>{installCommand}</code>
                 <span className="command-copy-status">
@@ -822,7 +827,7 @@ function App() {
             />
           </div>
           <div className="status" role="status" aria-live="polite">
-            <span className={tools.length ? "" : "warning"}>{tools.length ? status : STATUS_TEXT.noTools}</span>
+            <span className={outputBlockReason ? "warning" : ""}>{outputBlockReason || status}</span>
             <span>{added.length ? `자동 추가: ${added.join(", ")}` : ""}</span>
           </div>
         </Card>

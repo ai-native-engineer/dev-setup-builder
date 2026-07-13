@@ -6,7 +6,10 @@ if [ -z "${DEV_SETUP_SCRIPT_B64:-}" ]; then
   exit 1
 fi
 
-tmp="${TMPDIR:-/tmp}/dev-setup-builder-$$.command"
+tmp="$(mktemp "${TMPDIR:-/tmp}/dev-setup-builder.XXXXXX")"
+cleanup() { rm -f "$tmp"; }
+trap cleanup EXIT
+
 if ! printf "%s" "$DEV_SETUP_SCRIPT_B64" | base64 -D > "$tmp" 2>/dev/null; then
   printf "%s" "$DEV_SETUP_SCRIPT_B64" | base64 --decode > "$tmp"
 fi
