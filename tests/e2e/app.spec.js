@@ -13,8 +13,6 @@ test("exposes Korean, read-only preview, and announced status", async ({ page })
   await page.goto("./");
 
   await expect.soft(page.locator("html")).toHaveAttribute("lang", "ko");
-  await expect.soft(page.getByRole("link", { name: "미리보기로 건너뛰기" })).toHaveAttribute("href", "#script-preview");
-  await expect.soft(page.locator("#script-preview")).toHaveAttribute("aria-label", "생성된 설치 스크립트 미리보기");
   await expect.soft(page.getByRole("textbox", { name: "생성된 설치 스크립트" })).toHaveAttribute("readonly", "");
   await expect.soft(page.locator(".status")).toHaveAttribute("role", "status");
   await expect.soft(page.locator(".status")).toHaveAttribute("aria-live", "polite");

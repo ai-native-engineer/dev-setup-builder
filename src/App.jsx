@@ -570,7 +570,6 @@ function App() {
 
   return (
     <main className="app">
-      <a className="skip-link" href="#script-preview">미리보기로 건너뛰기</a>
       <header className="topbar">
         <div className="brand">
           <h1>개발 환경 설치 도우미</h1>
@@ -780,7 +779,7 @@ function App() {
           </div>
         </Card>
 
-        <Card id="script-preview" tabIndex={-1} className="panel preview" padding={0} role="region" aria-label="생성된 설치 스크립트 미리보기">
+        <Card className="panel preview" padding={0} role="region" aria-label="생성된 설치 스크립트 미리보기">
           <div className="preview-head">
             <div className="preview-title">
               <FileDown size={18} />
