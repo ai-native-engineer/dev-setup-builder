@@ -57,6 +57,15 @@ const dockerScript = buildMacScript(new Set(["homebrew", "docker"]), settings);
 assert.match(dockerScript, /brew_cask "Docker Desktop" "docker" "Docker\.app" ""/);
 assert.match(dockerScript, /brew list --cask "\$1"/);
 
+const dockerEngine = resolveSelection(new Set(["docker-engine"]), "mac");
+const dockerEngineScript = buildMacScript(dockerEngine, settings);
+assert.equal(dockerEngine.has("homebrew"), true);
+assert.match(dockerEngineScript, /brew install colima/);
+assert.match(dockerEngineScript, /brew install docker/);
+assert.match(dockerEngineScript, /colima start/);
+assert.match(dockerEngineScript, /docker info/);
+assert.doesNotMatch(dockerEngineScript, /brew_cask "Docker Desktop"/);
+
 const claudeTelemetry = resolveSelection(new Set(["claude-code-telemetry"]), "mac");
 const claudeTelemetryScript = buildMacScript(claudeTelemetry, {
   ...settings,

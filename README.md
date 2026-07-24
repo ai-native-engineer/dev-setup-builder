@@ -6,13 +6,17 @@ Live site: <https://ai-native-engineer.github.io/dev-setup-builder/>
 
 ## What It Generates
 
-- Core tools: Git, Node.js, pnpm, Python, uv, Bun, Docker Desktop, and Windows WSL2.
+- Core tools: Git, Node.js, pnpm, Python, uv, Bun, Docker Desktop, Docker Engine (Colima on macOS or Docker CE in WSL2 Ubuntu on Windows), and Windows WSL2.
 - Editor tools: VS Code and the Claude Code VS Code extension.
 - AI tools: Claude Desktop, Claude Code CLI, Codex App, and Codex CLI.
 - Source control tools: GitHub CLI, GitHub auth check, GitLab CLI, and Git identity defaults.
 - Optional deployment tool: Vercel CLI.
 
 Advanced observability settings for Claude Code CLI and Codex CLI are opt-in. They stay off by default, and the UI's "select all" action does not enable them. Prompt/body collection toggles are also off by default.
+
+Docker Engine is selected by default. Docker Desktop remains available as an alternative, but the two options are mutually exclusive.
+
+Selecting a tool also checks its required tools. Generated scripts install dependencies first; clearing a required tool also clears tools that depend on it.
 
 Switching from macOS to Windows enables WSL2 by default because a Windows developer setup usually needs it.
 

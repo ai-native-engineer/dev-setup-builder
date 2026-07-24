@@ -65,6 +65,18 @@ const dockerDetector = dockerScript.slice(
 assert.doesNotMatch(dockerDetector, /Has-Command 'docker'/);
 assert.doesNotMatch(dockerDetector, /resources\\\\bin\\\\docker\.exe/);
 
+const dockerEngine = resolveSelection(new Set(["docker-engine"]), "win");
+const dockerEngineScript = buildWindowsScript(dockerEngine, settings);
+assert.equal(dockerEngine.has("wsl2"), true);
+assert.match(dockerEngineScript, /Install-WSL2[\s\S]*Install-DockerEngine/);
+assert.match(dockerEngineScript, /wsl --install -d Ubuntu --no-launch/);
+assert.match(dockerEngineScript, /download\.docker\.com\/linux\/ubuntu/);
+assert.match(dockerEngineScript, /docker-ce docker-ce-cli containerd\.io docker-buildx-plugin docker-compose-plugin/);
+assert.match(dockerEngineScript, /systemd=true/);
+assert.match(dockerEngineScript, /docker\.bat/);
+assert.match(dockerEngineScript, /docker info/);
+assert.doesNotMatch(dockerEngineScript, /winget uninstall --id Docker\.DockerDesktop/);
+
 const pythonScript = buildWindowsScript(resolveSelection(new Set(["python"]), "win"), settings);
 const commandDetector = pythonScript.slice(
   pythonScript.indexOf("function Has-Command"),

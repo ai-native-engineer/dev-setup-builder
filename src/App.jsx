@@ -29,8 +29,10 @@ import {
   PACKAGES,
   autoAdded,
   buildScript,
+  deselectWithDependents,
   fileName,
   resolveSelection,
+  selectWithDependencies,
   supportsOs,
   visibleResolved
 } from "./builder.js";
@@ -126,8 +128,18 @@ const PACKAGE_TEXT = {
   python: { note: "Python 실행 환경과 패키지 도구를 설치합니다." },
   uv: { note: "Python 프로젝트와 패키지 관리를 위한 도구입니다." },
   bun: { note: "선택 사항인 JavaScript 런타임과 패키지 관리자입니다." },
-  docker: { note: "컨테이너 실행 환경입니다. 설치 후 처음 실행이나 재시작이 필요할 수 있습니다." },
+  docker: {
+    label: "Docker Desktop 앱",
+    note: "Docker Engine과 컨테이너 관리 화면을 함께 제공하는 데스크톱 앱입니다. 설치 후 처음 실행이나 재시작이 필요할 수 있습니다."
+  },
   wsl2: { note: "Windows 전용 Linux 환경입니다. 관리자 권한과 재시작이 필요할 수 있습니다." },
+  "docker-engine": {
+    label: "Docker Engine (무료 오픈소스)",
+    note: {
+      mac: "Colima VM과 Docker CLI를 설치합니다. Docker Desktop 앱은 설치하지 않습니다.",
+      win: "WSL2 Ubuntu 안에 Docker CE를 설치하고 Windows 터미널에 docker 명령을 연결합니다."
+    }
+  },
   vscode: { note: "코드 편집기와 code 명령을 설치합니다." },
   "claude-desktop": { note: "Claude 데스크톱 앱입니다." },
   "claude-code": { note: "Claude Code 명령줄 도구입니다. 공식 설치 순서를 우선 사용합니다." },
@@ -152,6 +164,7 @@ const PACKAGE_ICONS = {
   bun: [SiBun, "bun"],
   docker: [SiDocker, "docker"],
   wsl2: [FaWindows, "windows"],
+  "docker-engine": [SiDocker, "docker"],
   vscode: [FaCode, "vscode"],
   "claude-desktop": [SiClaude, "claude"],
   "claude-code": [SiClaudecode, "claude"],
@@ -169,6 +182,8 @@ const PACKAGE_ICONS = {
 
 const ADVANCED_PACKAGE_IDS = new Set(["claude-code-telemetry", "codex-telemetry"]);
 const PACKAGE_IDS = new Set(PACKAGES.map((item) => item.id));
+const PACKAGE_BY_ID = new Map(PACKAGES.map((item) => [item.id, item]));
+const SYSTEM_PACKAGE_LABELS = { homebrew: "Homebrew" };
 const URL_SETTING_KEYS = Object.keys(DEFAULT_SETTINGS);
 
 const PERMISSION_HELP = {
@@ -218,8 +233,14 @@ function packageLabel(item) {
   return PACKAGE_TEXT[item.id]?.label || item.label;
 }
 
-function packageNote(item) {
-  return PACKAGE_TEXT[item.id]?.note || item.note;
+function packageNote(item, os) {
+  const note = PACKAGE_TEXT[item.id]?.note;
+  const base = typeof note === "object" ? note[os] : note || item.note;
+  const dependencies = (item.deps[os] || []).map((id) => {
+    const dependency = PACKAGE_BY_ID.get(id);
+    return dependency ? packageLabel(dependency) : SYSTEM_PACKAGE_LABELS[id] || id;
+  });
+  return dependencies.length ? `${base} 필요 항목: ${dependencies.join(", ")} (자동 선택).` : base;
 }
 
 function groupKey(item) {
@@ -271,7 +292,7 @@ function SettingTextInput(props) {
 }
 
 function allSelection() {
-  return new Set(PACKAGES.filter((item) => !ADVANCED_PACKAGE_IDS.has(item.id)).map((item) => item.id));
+  return new Set(PACKAGES.filter((item) => !ADVANCED_PACKAGE_IDS.has(item.id) && item.id !== "docker").map((item) => item.id));
 }
 
 function parseUrlState() {
@@ -285,7 +306,11 @@ function parseUrlState() {
 
   if (params.has("tools")) {
     selected = new Set(params.get("tools").split(",").filter((id) => PACKAGE_IDS.has(id)));
+    if (selected.has("docker-engine")) {
+      selected.delete("docker");
+    }
   }
+  selected = selectWithDependencies(selected, targetOs);
 
   const settings = { ...DEFAULT_SETTINGS };
   for (const key of URL_SETTING_KEYS) {
@@ -408,7 +433,9 @@ function App() {
   function setTarget(nextOs) {
     setOs(nextOs);
     if (nextOs === "win") {
-      setSelected((current) => new Set([...current, "wsl2"]));
+      setSelected((current) => selectWithDependencies(new Set([...current, "wsl2"]), nextOs));
+    } else {
+      setSelected((current) => selectWithDependencies(current, nextOs));
     }
     setStatus(STATUS_TEXT.ready);
     setLastAction("");
@@ -418,11 +445,13 @@ function App() {
     setSelected((current) => {
       const next = new Set(current);
       if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
+        return deselectWithDependents(next, id, os);
       }
-      return next;
+      next.add(id);
+      if (id === "docker" || id === "docker-engine") {
+        next.delete(id === "docker" ? "docker-engine" : "docker");
+      }
+      return selectWithDependencies(next, os);
     });
   }
 
@@ -673,7 +702,7 @@ function App() {
                             className="package"
                             label={packageLabel(item)}
                             labelIcon={packageIcon(item.id)}
-                            description={packageNote(item)}
+                            description={packageNote(item, os)}
                             value={selected.has(item.id)}
                             onChange={() => togglePackage(item.id)}
                             width="100%"

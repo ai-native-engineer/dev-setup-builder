@@ -26,10 +26,15 @@ test("builds scripts and captures primary states", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "개발 환경 설치 도우미" })).toBeVisible();
   await expect(page.getByRole("radio", { name: "macOS" })).toHaveAttribute("aria-checked", "true");
   await expect(toolList.getByRole("checkbox", { name: /Windows WSL2/ })).toHaveCount(0);
-  await expect(toolList.getByRole("checkbox")).toHaveCount(18);
+  await expect(toolList.getByRole("checkbox")).toHaveCount(19);
   await expect(toolList.getByRole("checkbox", { name: /Bun/ })).toBeChecked();
   await expect(toolList.getByRole("checkbox", { name: /Codex App/ })).toBeChecked();
   await expect(toolList.getByRole("checkbox", { name: /Git 사용자 정보 기본값/ })).toBeChecked();
+  await expect(toolList.getByRole("checkbox", { name: /Docker Desktop/ })).not.toBeChecked();
+  await expect(toolList.getByRole("checkbox", { name: /Docker Engine/ })).toBeChecked();
+  await expect(page.locator("#group-core .package-block").last()).toContainText("Docker Desktop");
+  await expect(page.getByText(/Docker Engine과 컨테이너 관리 화면을 함께 제공하는 데스크톱 앱입니다.*필요 항목: Homebrew \(자동 선택\)/)).toBeVisible();
+  await expect(page.getByText(/Colima VM과 Docker CLI를 설치합니다.*필요 항목: Homebrew \(자동 선택\)/)).toBeVisible();
   await expect(page.getByRole("button", { name: /고급 설정/ })).toHaveAttribute("aria-expanded", "false");
   const pageOrigin = new URL(page.url()).origin;
   await page.context().grantPermissions(["clipboard-write"], { origin: pageOrigin });
@@ -48,6 +53,8 @@ test("builds scripts and captures primary states", async ({ page }) => {
   await page.getByRole("button", { name: "전체 선택" }).click();
   await expect(toolList.getByRole("checkbox", { name: /Claude Code 관측 로그/ })).not.toBeChecked();
   await expect(toolList.getByRole("checkbox", { name: /Codex 관측 로그/ })).not.toBeChecked();
+  await expect(toolList.getByRole("checkbox", { name: /Docker Desktop/ })).not.toBeChecked();
+  await expect(toolList.getByRole("checkbox", { name: /Docker Engine/ })).toBeChecked();
   await expect(toolList.getByRole("checkbox", { name: /Git 사용자 정보 기본값/ })).toBeChecked();
   await toolList.getByRole("checkbox", { name: /Claude Code 관측 로그/ }).click();
   await toolList.getByRole("checkbox", { name: /Codex 관측 로그/ }).click();
@@ -95,6 +102,8 @@ test("builds scripts and captures primary states", async ({ page }) => {
   await expect(windowsTerminalButton).toContainText(`${pageOrigin}/dev-setup-builder/run-windows.ps1`);
   await expect.poll(async () => windowsTerminalButton.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
   await expect(page.getByRole("textbox", { name: "생성된 설치 스크립트" })).toHaveValue(/Install-WSL2/);
+  await expect(toolList.getByRole("checkbox", { name: /Docker Engine/ })).toBeChecked();
+  await expect(page.getByText(/WSL2 Ubuntu 안에 Docker CE를 설치하고 Windows 터미널에 docker 명령을 연결합니다.*필요 항목: Windows WSL2 \(자동 선택\)/)).toBeVisible();
   await page.screenshot({ path: join(screenshotDir, "windows-home.png"), fullPage: true });
 
   const downloadPromise = page.waitForEvent("download");
@@ -189,4 +198,44 @@ test("enables WSL2 by default when switching from macOS to Windows", async ({ pa
 
   await expect(toolList.getByRole("checkbox", { name: /Windows WSL2/ })).toBeChecked();
   await expect(page.getByRole("textbox", { name: "생성된 설치 스크립트" })).toHaveValue(/Install-WSL2/);
+});
+
+test("selects Docker Desktop and Docker Engine as alternatives", async ({ page }) => {
+  await page.goto("./");
+
+  const toolList = page.getByLabel("설치할 도구");
+  const desktop = toolList.getByRole("checkbox", { name: /Docker Desktop/ });
+  const engine = toolList.getByRole("checkbox", { name: /Docker Engine/ });
+
+  await expect(desktop).not.toBeChecked();
+  await expect(engine).toBeChecked();
+  await desktop.click();
+  await expect(desktop).toBeChecked();
+  await expect(engine).not.toBeChecked();
+  await engine.click();
+  await expect(desktop).not.toBeChecked();
+  await expect(engine).toBeChecked();
+  await expect(page.getByRole("textbox", { name: "생성된 설치 스크립트" })).toHaveValue(/colima start/);
+
+  await page.getByRole("radio", { name: "Windows" }).click();
+  await expect(engine).toBeChecked();
+  await expect(page.getByRole("textbox", { name: "생성된 설치 스크립트" })).toHaveValue(/docker-ce docker-ce-cli/);
+  await expect(page.getByRole("textbox", { name: "생성된 설치 스크립트" })).not.toHaveValue(/\r?\nInstall-DockerDesktop\r?\n/);
+});
+
+test("checks dependencies and removes dependents consistently", async ({ page }) => {
+  await page.goto("./?os=win&tools=docker-engine");
+
+  const toolList = page.getByLabel("설치할 도구");
+  const engine = toolList.getByRole("checkbox", { name: /Docker Engine/ });
+  const wsl2 = toolList.getByRole("checkbox", { name: /Windows WSL2/ });
+
+  await expect(engine).toBeChecked();
+  await expect(wsl2).toBeChecked();
+  const script = await page.getByRole("textbox", { name: "생성된 설치 스크립트" }).inputValue();
+  expect(script.lastIndexOf("Install-WSL2")).toBeLessThan(script.lastIndexOf("Install-DockerEngine"));
+
+  await wsl2.click();
+  await expect(wsl2).not.toBeChecked();
+  await expect(engine).not.toBeChecked();
 });

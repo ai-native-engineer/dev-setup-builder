@@ -68,16 +68,6 @@ export const PACKAGES = [
     win: () => ["Install-Bun"]
   },
   {
-    id: "docker",
-    group: "Core",
-    label: "Docker Desktop",
-    note: "Container runtime. May require first launch or restart after install.",
-    presets: [],
-    deps: { mac: ["homebrew"], win: [] },
-    mac: () => ['brew_cask "Docker Desktop" "docker" "Docker.app" ""'],
-    win: () => ["Install-DockerDesktop"]
-  },
-  {
     id: "wsl2",
     group: "Core",
     label: "Windows WSL2",
@@ -86,6 +76,16 @@ export const PACKAGES = [
     presets: [],
     deps: { mac: [], win: [] },
     win: () => ["Install-WSL2"]
+  },
+  {
+    id: "docker-engine",
+    group: "Core",
+    label: "Docker Engine (open source)",
+    note: "Docker without Docker Desktop. Uses Colima on macOS and Docker CE inside WSL2 Ubuntu on Windows.",
+    presets: [],
+    deps: { mac: ["homebrew"], win: ["wsl2"] },
+    mac: () => ["install_docker_engine"],
+    win: () => ["Install-DockerEngine"]
   },
   {
     id: "vscode",
@@ -220,6 +220,16 @@ export const PACKAGES = [
     win: (settings) => [
       `Set-GitDefaults -Name ${ps(settings.gitName)} -Email ${ps(settings.gitEmail)}`
     ]
+  },
+  {
+    id: "docker",
+    group: "Core",
+    label: "Docker Desktop",
+    note: "Container runtime. May require first launch or restart after install.",
+    presets: [],
+    deps: { mac: ["homebrew"], win: [] },
+    mac: () => ['brew_cask "Docker Desktop" "docker" "Docker.app" ""'],
+    win: () => ["Install-DockerDesktop"]
   }
 ];
 
@@ -312,6 +322,20 @@ export function resolveSelection(ids, os) {
     }
   }
   return resolved;
+}
+
+export function selectWithDependencies(ids, os) {
+  const selected = new Set(ids);
+  for (const id of visibleResolved(resolveSelection(selected, os))) {
+    selected.add(id);
+  }
+  return selected;
+}
+
+export function deselectWithDependents(ids, removedId, os) {
+  return new Set([...ids].filter((id) => (
+    id !== removedId && !resolveSelection(new Set([id]), os).has(removedId)
+  )));
 }
 
 export function visibleResolved(resolved) {
@@ -435,6 +459,18 @@ export function buildMacScript(resolved, settings) {
     '  brew install --cask "$cask" >> "$LOG" 2>&1',
     "  refresh_path",
     '  if { [ -n "$command_name" ] && has "$command_name"; } || app_exists "$app_name" || cask_installed "$cask"; then ok "$label installed"; else fail "$label"; fi',
+    "}",
+    "",
+    "install_docker_engine() {",
+    '  info "Docker Engine (Colima)"',
+    '  if ! has brew; then fail "Docker Engine (Homebrew missing)"; return 1; fi',
+    "  # Colima runs the open-source Docker runtime in a Linux VM: https://github.com/abiosoft/colima",
+    '  has colima || brew install colima >> "$LOG" 2>&1',
+    '  brew list --formula docker >/dev/null 2>&1 || brew install docker >> "$LOG" 2>&1',
+    "  refresh_path",
+    '  if ! has colima || ! has docker; then fail "Docker Engine"; return 1; fi',
+    '  colima status >> "$LOG" 2>&1 || colima start >> "$LOG" 2>&1',
+    '  if docker info >> "$LOG" 2>&1; then ok "Docker Engine running with Colima"; else fail "Docker Engine"; fi',
     "}",
     "",
     "npm_global() {",
@@ -771,6 +807,104 @@ export function buildWindowsScript(resolved, settings) {
     "  & wsl --install --no-launch *>> $LogFile",
     "  $exitCode = $LASTEXITCODE",
     "  if ($exitCode -eq 0) { Ok 'WSL2 install started; restart may be required' } else { Fail 'WSL2' }",
+    "}",
+    "",
+    "function Get-WslDistros {",
+    "  if (-not (Has-Command 'wsl')) { return @() }",
+    "  $list = & wsl -l -q 2>$null",
+    "  if (-not $list) { return @() }",
+    "  return @($list | ForEach-Object { \"$_\".Replace([char]0, '').Trim() } | Where-Object { $_ })",
+    "}",
+    "",
+    "function Invoke-WslBash {",
+    "  param([string]$Distro, [string]$User, [string]$ScriptText)",
+    "  $clean = $ScriptText -replace \"`r\", ''",
+    "  $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($clean))",
+    "  & wsl -d $Distro -u $User -- bash -c \"echo $encoded | base64 -d | bash\" *>> $LogFile",
+    "  return $LASTEXITCODE",
+    "}",
+    "",
+    "function Install-DockerEngine {",
+    "  Step 'Docker Engine (WSL2 Ubuntu)'",
+    "  if (-not (Has-Command 'wsl')) { Fail 'Docker Engine (WSL2 missing)'; return }",
+    "  & wsl --status *>> $LogFile",
+    "  if ($LASTEXITCODE -ne 0) { Fail 'Docker Engine (restart Windows, then rerun this script)'; return }",
+    "",
+    "  $distro = @(Get-WslDistros | Where-Object { $_ -like 'Ubuntu*' } | Select-Object -First 1)[0]",
+    "  if (-not $distro) {",
+    "    if (-not (Test-Admin)) { Fail 'Ubuntu for Docker Engine (run as administrator)'; return }",
+    "    # Official WSL install docs: https://learn.microsoft.com/windows/wsl/install",
+    "    & wsl --install -d Ubuntu --no-launch *>> $LogFile",
+    "    $distro = @(Get-WslDistros | Where-Object { $_ -like 'Ubuntu*' } | Select-Object -First 1)[0]",
+    "  }",
+    "  if (-not $distro) { Fail 'Ubuntu for Docker Engine (restart Windows, then rerun this script)'; return }",
+    "",
+    "  & wsl --set-version $distro 2 *>> $LogFile",
+    "  if ($LASTEXITCODE -ne 0) { Fail \"Docker Engine ($distro could not switch to WSL2)\"; return }",
+    "  & wsl --set-default $distro *>> $LogFile",
+    "  & wsl -d $distro -u root -- true *>> $LogFile",
+    "  if ($LASTEXITCODE -ne 0) { Fail \"Docker Engine ($distro initialization)\"; return }",
+    "",
+    "  $systemdScript = @'",
+    "set -e",
+    "touch /etc/wsl.conf",
+    "if grep -q '^systemd=' /etc/wsl.conf; then",
+    "  sed -i 's/^systemd=.*/systemd=true/' /etc/wsl.conf",
+    "elif grep -q '^\\[boot\\]' /etc/wsl.conf; then",
+    "  sed -i '/^\\[boot\\]/a systemd=true' /etc/wsl.conf",
+    "else",
+    "  printf '\\n[boot]\\nsystemd=true\\n' >> /etc/wsl.conf",
+    "fi",
+    "'@",
+    "  if ((Invoke-WslBash $distro 'root' $systemdScript) -ne 0) { Fail 'Docker Engine (systemd configuration)'; return }",
+    "  & wsl --terminate $distro *>> $LogFile",
+    "",
+    "  $installScript = @'",
+    "set -e",
+    "export DEBIAN_FRONTEND=noninteractive",
+    "apt-get update",
+    "for pkg in docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc; do",
+    "  dpkg-query -W -f='${Status}' \"$pkg\" 2>/dev/null | grep -q 'ok installed' && apt-get remove -y \"$pkg\" || true",
+    "done",
+    "apt-get install -y ca-certificates curl",
+    "install -m 0755 -d /etc/apt/keyrings",
+    "curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc",
+    "chmod a+r /etc/apt/keyrings/docker.asc",
+    ". /etc/os-release",
+    "cat > /etc/apt/sources.list.d/docker.sources <<EOF",
+    "Types: deb",
+    "URIs: https://download.docker.com/linux/ubuntu",
+    "Suites: ${UBUNTU_CODENAME:-$VERSION_CODENAME}",
+    "Components: stable",
+    "Architectures: $(dpkg --print-architecture)",
+    "Signed-By: /etc/apt/keyrings/docker.asc",
+    "EOF",
+    "apt-get update",
+    "apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin",
+    "default_user=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 65534 { print $1; exit }')",
+    "[ -z \"$default_user\" ] || usermod -aG docker \"$default_user\"",
+    "if [ -d /run/systemd/system ]; then",
+    "  systemctl enable docker",
+    "  systemctl restart docker",
+    "else",
+    "  service docker restart",
+    "fi",
+    "docker info >/dev/null",
+    "'@",
+    "  if ((Invoke-WslBash $distro 'root' $installScript) -ne 0) { Fail 'Docker Engine installation'; return }",
+    "",
+    "  $binDir = Join-Path $env:USERPROFILE '.local\\bin'",
+    "  New-Item -ItemType Directory -Path $binDir -Force | Out-Null",
+    "  $shim = \"@echo off`r`nwsl -d `\"$distro`\" -- docker %*`r`n\"",
+    "  [IO.File]::WriteAllText((Join-Path $binDir 'docker.bat'), $shim, [Text.UTF8Encoding]::new($false))",
+    "  $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')",
+    "  if (-not $userPath) { $userPath = '' }",
+    "  $pathParts = @($userPath -split ';' | Where-Object { $_ -and ($_ -ne $binDir) })",
+    "  [Environment]::SetEnvironmentVariable('Path', ((@($binDir) + $pathParts) -join ';'), 'User')",
+    "  if ($env:Path -notlike \"$binDir;*\") { $env:Path = \"$binDir;$env:Path\" }",
+    "",
+    "  & wsl -d $distro -u root -- docker info *>> $LogFile",
+    "  if ($LASTEXITCODE -eq 0) { Ok \"Docker Engine running in $distro; docker.bat created\" } else { Fail 'Docker Engine verification' }",
     "}",
     "",
     "function Install-Bun {",
@@ -1116,7 +1250,9 @@ export function selfTest() {
     codexNativeIndex >= 0 && codexNativeIndex < codexBrewIndex && codexBrewIndex < codexNpmIndex,
     claudeNativeIndex >= 0 && claudeNativeIndex < claudeBrewIndex && claudeBrewIndex < claudeNpmIndex,
     buildMacScript(new Set(["homebrew", "docker"]), settings).includes('brew_cask "Docker Desktop" "docker"'),
-    buildWindowsScript(new Set(["docker"]), settings).includes("Docker.DockerDesktop")
+    buildWindowsScript(new Set(["docker"]), settings).includes("Docker.DockerDesktop"),
+    buildMacScript(resolveSelection(new Set(["docker-engine"]), "mac"), settings).includes("colima start"),
+    buildWindowsScript(resolveSelection(new Set(["docker-engine"]), "win"), settings).includes("docker-ce docker-ce-cli")
   ];
   return { ok: checks.every(Boolean), checks };
 }
