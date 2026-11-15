@@ -26,7 +26,7 @@ test("builds scripts and captures primary states", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "개발 환경 설치 도우미" })).toBeVisible();
   await expect(page.getByRole("radio", { name: "macOS" })).toHaveAttribute("aria-checked", "true");
   await expect(toolList.getByRole("checkbox", { name: /Windows WSL2/ })).toHaveCount(0);
-  await expect(toolList.getByRole("checkbox")).toHaveCount(19);
+  await expect(toolList.getByRole("checkbox")).toHaveCount(22);
   await expect(toolList.getByRole("checkbox", { name: /Bun/ })).toBeChecked();
   await expect(toolList.getByRole("checkbox", { name: /Codex App/ })).toBeChecked();
   await expect(toolList.getByRole("checkbox", { name: /Git 사용자 정보 기본값/ })).toBeChecked();

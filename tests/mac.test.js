@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   PACKAGES,
   buildMacScript,
+  presetSelection,
   resolveSelection,
   selfTest,
   supportsOs
@@ -21,6 +22,15 @@ assert.equal(codex.has("node"), true);
 assert.equal(codex.has("homebrew"), true);
 assert.equal(nodeIndex >= 0 && nodeIndex < codexCallIndex, true);
 assert.equal(codexNativeIndex >= 0 && codexNativeIndex < codexBrewIndex && codexBrewIndex < codexNpmIndex, true);
+
+const videoClassMac = resolveSelection(presetSelection("video-class"), "mac");
+const videoClassMacScript = buildMacScript(videoClassMac, settings);
+assert.equal(videoClassMac.has("homebrew"), true);
+assert.equal(videoClassMac.has("node"), false);
+assert.match(videoClassMacScript, /brew_formula "FFmpeg" "ffmpeg" "ffmpeg"/);
+assert.match(videoClassMacScript, /brew_formula "Deno" "deno" "deno"/);
+assert.match(videoClassMacScript, /brew_formula "yt-dlp" "yt-dlp" "yt-dlp"/);
+assert.equal(videoClassMacScript.indexOf('brew_formula "Deno"') < videoClassMacScript.indexOf('brew_formula "yt-dlp"'), true);
 
 const claudeCode = resolveSelection(new Set(["claude-code"]), "mac");
 const claudeCodeScript = buildMacScript(claudeCode, settings);

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildWindowsScript,
+  presetSelection,
   resolveSelection,
   selfTest
 } from "../src/builder.js";
@@ -38,6 +39,35 @@ assert.equal(codexApp.has("node"), false);
 assert.match(codexAppScript, /(^|\r\n)Install-CodexApp(\r\n|$)/);
 assert.match(codexAppScript, /9PLM9XGG6VKS/);
 assert.match(codexAppScript, /--source msstore/);
+
+const videoClass = presetSelection("video-class");
+assert.deepEqual(videoClass, new Set(["codex-app", "ffmpeg", "deno", "yt-dlp"]));
+const videoClassResolved = resolveSelection(videoClass, "win");
+const videoClassScript = buildWindowsScript(videoClassResolved, settings);
+for (const id of ["wsl2", "git", "node"]) {
+  assert.equal(videoClassResolved.has(id), false, `${id} must stay out of the video-class preset`);
+}
+assert.match(videoClassScript, /Install-Winget -Label 'FFmpeg' -PackageId 'Gyan\.FFmpeg\.Essentials' -Command 'ffmpeg' -ExtraArgs @\('--scope','user'\)/);
+assert.match(videoClassScript, /Install-Winget -Label 'Deno' -PackageId 'DenoLand\.Deno' -Command 'deno' -ExtraArgs @\('--scope','user'\)/);
+assert.match(videoClassScript, /Install-Winget -Label 'yt-dlp' -PackageId 'yt-dlp\.yt-dlp' -Command 'yt-dlp' -ExtraArgs @\('--scope','user','--skip-dependencies'\)/);
+assert.equal(videoClassScript.indexOf("-PackageId 'DenoLand.Deno'") < videoClassScript.indexOf("-PackageId 'yt-dlp.yt-dlp'"), true);
+assert.doesNotMatch(videoClassScript, /Install-WSL2\r\n/);
+assert.equal(videoClassScript.indexOf("-PackageId 'Gyan.FFmpeg.Essentials'") < videoClassScript.indexOf("-PackageId 'yt-dlp.yt-dlp'"), true);
+assert.doesNotMatch(videoClassScript, /\birm\b|\biex\b|Invoke-Expression/i);
+assert.doesNotMatch(videoClassScript, /function (Install-(Bun|Uv|ClaudeCode|CodexCli|DockerEngine|WSL2)|Set-(ClaudeCode|Codex)Telemetry)/);
+assert.match(videoClassScript, /function Install-CodexApp/);
+assert.match(videoClassScript, /function Test-CodexApp/);
+
+// Pruning keeps helpers that selected tools still call, including transitive ones.
+const claudeCodeFull = buildWindowsScript(resolveSelection(new Set(["claude-code"]), "win"), settings);
+assert.match(claudeCodeFull, /function Install-ClaudeCode/);
+assert.match(claudeCodeFull, /function Install-NpmGlobal/);
+const pnpmOnly = buildWindowsScript(resolveSelection(new Set(["pnpm"]), "win"), settings);
+assert.doesNotMatch(pnpmOnly, /function Install-CodexApp/);
+assert.doesNotMatch(videoClassScript, /^Set-(ClaudeCode|Codex)Telemetry /m);
+
+const ytDlp = resolveSelection(new Set(["yt-dlp"]), "win");
+assert.equal(ytDlp.has("deno"), true);
 
 const extension = resolveSelection(new Set(["claude-extension"]), "win");
 const extensionScript = buildWindowsScript(extension, settings);
@@ -84,7 +114,7 @@ const commandDetector = pythonScript.slice(
 );
 const wingetInstaller = pythonScript.slice(
   pythonScript.indexOf("function Install-Winget"),
-  pythonScript.indexOf("function Install-NpmGlobal")
+  pythonScript.lastIndexOf("\r\nRefresh-Path\r\n")
 );
 const pythonBodyStart = pythonScript.lastIndexOf("$pythonOk = $false");
 const pythonBody = pythonScript.slice(
@@ -169,7 +199,7 @@ if (!pwsh.error && pwsh.status === 0) {
 
   const helpers = codexTelemetryScript.slice(
     codexTelemetryScript.indexOf("function ConvertTo-TomlString"),
-    codexTelemetryScript.indexOf("function Check-GitHubAuth")
+    codexTelemetryScript.lastIndexOf("\r\nRefresh-Path\r\n")
   );
   const call = codexTelemetryScript.split(/\r?\n/).find((line) => line.startsWith("Set-CodexTelemetry "));
   const harness = [
