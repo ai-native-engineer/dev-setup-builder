@@ -128,6 +128,18 @@ assert.match(commandDetector, /--version/);
 assert.match(pythonBody, /-DeferFailure/);
 assert.match(pythonBody, /if \(-not \$pythonOk\) \{ Fail 'Python' \}/);
 
+// ps() must double every character PowerShell accepts as a single-quote delimiter, or a value can break out of its string.
+{
+  const payload = "a\u2019;calc;\u2019 b\u2018c\u201Ad\u201Be'f";
+  const quoted = buildWindowsScript(resolveSelection(new Set(["git", "git-config"]), "win"), { gitName: payload, gitEmail: "x@example.com" });
+  assert.match(quoted, /Set-GitDefaults -Name 'a\u2019\u2019;calc;\u2019\u2019 b\u2018\u2018c\u201A\u201Ad\u201B\u201Be''f' -Email 'x@example\.com'/);
+  for (const quote of ["\u2018", "\u2019", "\u201A", "\u201B", "'"]) {
+    const line = buildWindowsScript(resolveSelection(new Set(["git", "git-config"]), "win"), { gitName: `x${quote}y`, gitEmail: "e@example.com" })
+      .split("\r\n").find((l) => l.startsWith("Set-GitDefaults "));
+    assert.equal(line, `Set-GitDefaults -Name 'x${quote}${quote}y' -Email 'e@example.com'`);
+  }
+}
+
 const claudeTelemetry = resolveSelection(new Set(["claude-code-telemetry"]), "win");
 const claudeTelemetryScript = buildWindowsScript(claudeTelemetry, {
   ...settings,
