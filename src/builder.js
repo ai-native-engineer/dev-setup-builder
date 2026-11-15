@@ -204,8 +204,8 @@ export const PACKAGES = [
     note: "Downloads a zip over HTTPS into Documents. Never overwrites an existing folder and never runs downloaded files.",
     presets: [],
     deps: { mac: [], win: [] },
-    mac: (settings) => [`install_project_folder ${sh(projectArg(settings, "projectUrl"))} ${sh(projectArg(settings, "projectName"))} ${sh(projectArg(settings, "projectSha256"))}`],
-    win: (settings) => [`Install-ProjectFolder -Url ${ps(projectArg(settings, "projectUrl"))} -Name ${ps(projectArg(settings, "projectName"))} -Sha256 ${ps(projectArg(settings, "projectSha256"))}`]
+    mac: (settings) => projectFolderLines(settings, (url, name, sha) => `install_project_folder ${sh(url)} ${sh(name)} ${sh(sha)}`),
+    win: (settings) => projectFolderLines(settings, (url, name, sha) => `Install-ProjectFolder -Url ${ps(url)} -Name ${ps(name)} -Sha256 ${ps(sha)}`)
   },
   {
     id: "vercel",
@@ -308,12 +308,47 @@ function sh(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
+// PowerShell treats ASCII ' and the typographic quotes U+2018, U+2019, U+201A, U+201B as single-quote delimiters.
+// Doubling any of them inside a single-quoted string yields the literal character.
 function ps(value) {
-  return `'${String(value).replace(/'/g, "''")}'`;
+  return `'${String(value).replace(/['\u2018\u2019\u201A\u201B]/g, "$&$&")}'`;
 }
 
 function projectArg(settings, key) {
-  return String(settings?.[key] ?? "").replace(/[\r\n]/g, "").trim();
+  return String(settings?.[key] ?? "").trim();
+}
+
+const PROJECT_URL_PATTERN = /^https:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&()*+,;=%]+$/;
+const PROJECT_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const PROJECT_SHA_PATTERN = /^[0-9a-fA-F]{64}$/;
+
+// Returns Korean error messages; an empty URL means "no project", so the other fields are ignored.
+export function projectFolderErrors(settings) {
+  const url = projectArg(settings, "projectUrl");
+  if (!url) {
+    return [];
+  }
+  const errors = [];
+  if (!PROJECT_URL_PATTERN.test(url)) {
+    errors.push("ZIP 주소는 https:// 로 시작해야 하며 공백, 따옴표, 백틱, 한글 같은 문자를 쓸 수 없습니다.");
+  }
+  if (!PROJECT_NAME_PATTERN.test(projectArg(settings, "projectName"))) {
+    errors.push("폴더 이름은 영문 또는 숫자로 시작하고 영문, 숫자, 점, 밑줄, 하이픈만 쓸 수 있습니다(최대 64자).");
+  }
+  const sha = projectArg(settings, "projectSha256");
+  if (sha && !PROJECT_SHA_PATTERN.test(sha)) {
+    errors.push("SHA-256은 64자리 16진수여야 합니다.");
+  }
+  return errors;
+}
+
+// Invalid values never reach the script: the step is omitted and the UI shows projectFolderErrors().
+function projectFolderLines(settings, build) {
+  if (projectFolderErrors(settings).length) {
+    return [];
+  }
+  const url = projectArg(settings, "projectUrl");
+  return [url ? build(url, projectArg(settings, "projectName"), projectArg(settings, "projectSha256")) : build("", "", "")];
 }
 
 // Escapes non-ASCII characters so the generated .bat stays ASCII-only and survives any editor or mail re-encoding.

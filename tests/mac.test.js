@@ -43,8 +43,8 @@ assert.match(videoClassMacScript, /ChatGPT 앱을 완전히 종료한 뒤 다시
 assert.doesNotMatch(buildMacScript(resolveSelection(new Set(["pnpm"]), "mac"), settings), /verify_media_tools|show_end_notes/);
 assert.doesNotMatch(videoClassMacScript, /install_project_folder\(\)/);
 
-const projectMac = buildMacScript(resolveSelection(new Set(["project-folder"]), "mac"), { ...settings, projectUrl: "https://example.com/a'b.zip", projectName: "lab", projectSha256: "" });
-assert.match(projectMac, /install_project_folder 'https:\/\/example\.com\/a'\\''b\.zip' 'lab' ''/);
+const projectMac = buildMacScript(resolveSelection(new Set(["project-folder"]), "mac"), { ...settings, projectUrl: "https://example.com/a;b$c.zip", projectName: "lab", projectSha256: "" });
+assert.match(projectMac, /install_project_folder 'https:\/\/example\.com\/a;b\$c\.zip' 'lab' ''/);
 assert.match(projectMac, /--proto '=https' --proto-redir '=https'/);
 assert.match(projectMac, /\$HOME\/Documents\/\$name/);
 assert.doesNotMatch(projectMac, /\beval\b.*\$zip|source "\$stage|bash "\$stage/);

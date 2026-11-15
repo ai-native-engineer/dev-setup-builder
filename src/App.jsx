@@ -31,6 +31,7 @@ import {
   buildScript,
   deselectWithDependents,
   presetSelection,
+  projectFolderErrors,
   fileName,
   resolveSelection,
   selectWithDependencies,
@@ -555,6 +556,7 @@ function App() {
     }
 
     if (item.id === "project-folder") {
+      const projectErrors = projectFolderErrors(settings);
       return (
         <Collapsible className="package-settings" trigger="프로젝트 폴더 설정" defaultIsOpen>
           <div className="settings">
@@ -581,6 +583,12 @@ function App() {
                 placeholder="64자리 16진수"
               />
             </div>
+            {projectErrors.length ? (
+              <ul className="project-errors" role="alert">
+                {projectErrors.map((message) => <li key={message}>{message}</li>)}
+                <li>입력을 고치기 전에는 프로젝트 폴더 단계가 스크립트에 들어가지 않습니다.</li>
+              </ul>
+            ) : null}
           </div>
         </Collapsible>
       );

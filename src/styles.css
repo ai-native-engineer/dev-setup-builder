@@ -787,3 +787,10 @@ body {
     margin: 0 14px 14px;
   }
 }
+
+.project-errors {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #b42318;
+  font-size: 13px;
+}

@@ -289,3 +289,14 @@ test("shows the macOS Codex label and the Windows ChatGPT label", async ({ page 
   await page.getByRole("radio", { name: "Windows" }).click();
   await expect(page.getByLabel("설치할 도구").getByRole("checkbox", { name: /ChatGPT 데스크톱 앱 \(Codex 포함\)/ })).toBeVisible();
 });
+
+test("rejects unsafe project values from a shared link", async ({ page }) => {
+  const url = encodeURIComponent("https://x/a’;calc;’");
+  await page.goto(`./?os=win&preset=video-class&project=${url}&name=${encodeURIComponent("a$(calc)")}`);
+
+  const preview = page.getByRole("textbox", { name: "생성된 설치 스크립트" });
+  await expect(page.getByRole("alert").filter({ hasText: "ZIP 주소는 https://" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "폴더 이름은" })).toBeVisible();
+  await expect(preview).not.toHaveValue(/Install-ProjectFolder -Url/);
+  await expect(preview).not.toHaveValue(/calc/);
+});

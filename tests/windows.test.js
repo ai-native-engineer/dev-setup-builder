@@ -4,7 +4,9 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  buildMacScript,
   buildWindowsScript,
+  projectFolderErrors,
   presetSelection,
   resolveSelection,
   selfTest
@@ -143,14 +145,65 @@ assert.match(pythonBody, /-DeferFailure/);
 assert.match(pythonBody, /if \(-not \$pythonOk\) \{ Fail 'Python' \}/);
 
 // Project folder: static content checks.
-const projectSettings = { ...settings, projectUrl: "https://example.com/a'b/repo.zip", projectName: "kaist-shorts-lab", projectSha256: "" };
+const projectSettings = { ...settings, projectUrl: "https://example.com/a;b$c/repo.zip", projectName: "kaist-shorts-lab", projectSha256: "" };
 const projectScript = buildWindowsScript(resolveSelection(new Set(["project-folder"]), "win"), projectSettings);
-assert.match(projectScript, /Install-ProjectFolder -Url 'https:\/\/example\.com\/a''b\/repo\.zip' -Name 'kaist-shorts-lab' -Sha256 ''/);
+assert.match(projectScript, /Install-ProjectFolder -Url 'https:\/\/example\.com\/a;b\$c\/repo\.zip' -Name 'kaist-shorts-lab' -Sha256 ''/);
 assert.match(projectScript, /\^https:\/\//);
 assert.match(projectScript, /Get-FileHash -Algorithm SHA256/);
 assert.match(projectScript, /unsafe path in zip/);
 assert.doesNotMatch(projectScript, /Expand-Archive|Start-Process|Invoke-Expression|\biex\b|\birm\b/);
 assert.equal(/[^\x00-\x7f]/.test(projectScript), false);
+
+// Injection payloads must be rejected and never reach the generated script.
+{
+  const goodName = "lab";
+  const goodUrl = "https://example.com/a.zip";
+  const badUrls = [
+    "https://x/a\u2019;calc;\u2019",
+    "https://x/a\u2018;calc;\u2018",
+    "https://x/a\u201A;calc;\u201B",
+    "https://x/a';calc;'",
+    'https://x/a";calc;"',
+    "https://x/a`calc`",
+    "https://x/a b.zip",
+    "https://x/a\nInvoke-Expression x",
+    "http://x/a.zip",
+    "https://x/\uD55C\uAE00.zip"
+  ];
+  const badNames = ["a\u2019;calc;\u2019", "a\u2018b", "a;b", "a$(calc)", "a`calc`", "a b", "../x", "", ".hidden", "x".repeat(65)];
+  for (const url of badUrls) {
+    assert.equal(projectFolderErrors({ projectUrl: url, projectName: goodName }).length > 0, true, `url ${JSON.stringify(url)}`);
+  }
+  for (const name of badNames) {
+    assert.equal(projectFolderErrors({ projectUrl: goodUrl, projectName: name }).length > 0, true, `name ${JSON.stringify(name)}`);
+  }
+  assert.equal(projectFolderErrors({ projectUrl: goodUrl, projectName: goodName, projectSha256: "g".repeat(64) }).length > 0, true);
+  assert.equal(projectFolderErrors({ projectUrl: goodUrl, projectName: goodName, projectSha256: "ab" }).length > 0, true);
+  assert.equal(projectFolderErrors({ projectUrl: goodUrl, projectName: goodName, projectSha256: "A".repeat(64) }).length, 0);
+  assert.equal(projectFolderErrors({ projectUrl: "", projectName: "ignored;value" }).length, 0);
+
+  const select = new Set(["project-folder"]);
+  for (const bad of [
+    { projectUrl: "https://x/a\u2019;calc;\u2019", projectName: goodName },
+    { projectUrl: goodUrl, projectName: "a\u2019;calc;\u2019" },
+    { projectUrl: goodUrl, projectName: "a$(calc)" },
+    { projectUrl: goodUrl, projectName: goodName, projectSha256: "x'; calc; '" }
+  ]) {
+    const out = buildWindowsScript(resolveSelection(select, "win"), { ...settings, ...bad });
+    assert.doesNotMatch(out, /(^|\r\n)Install-ProjectFolder /);
+    assert.doesNotMatch(out, /calc/);
+    const mac = buildMacScript(resolveSelection(select, "mac"), { ...settings, ...bad });
+    assert.doesNotMatch(mac, /(^|\n)install_project_folder /);
+    assert.doesNotMatch(mac, /calc/);
+  }
+
+  // ps() doubles typographic single quotes too (checked through another free-text setting).
+  const quoted = buildWindowsScript(resolveSelection(new Set(["git", "git-config"]), "win"), {
+    gitName: "a\u2019;calc;\u2019 b\u2018c\u201Ad\u201Be'f",
+    gitEmail: "x@example.com"
+  });
+  assert.match(quoted, /-Name 'a\u2019\u2019;calc;\u2019\u2019 b\u2018\u2018c\u201A\u201Ad\u201B\u201Be''f'/);
+}
 
 // Project folder: run the generated function in PowerShell with a stubbed download.
 {
