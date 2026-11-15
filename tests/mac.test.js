@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   PACKAGES,
   buildMacScript,
@@ -31,6 +35,54 @@ assert.match(videoClassMacScript, /brew_formula "FFmpeg" "ffmpeg" "ffmpeg"/);
 assert.match(videoClassMacScript, /brew_formula "Deno" "deno" "deno"/);
 assert.match(videoClassMacScript, /brew_formula "yt-dlp" "yt-dlp" "yt-dlp"/);
 assert.equal(videoClassMacScript.indexOf('brew_formula "Deno"') < videoClassMacScript.indexOf('brew_formula "yt-dlp"'), true);
+
+assert.match(videoClassMacScript, /verify_media_tools/);
+assert.match(videoClassMacScript, /ffmpeg -hide_banner -filters/);
+assert.match(videoClassMacScript, /drawtext/);
+assert.match(videoClassMacScript, /ChatGPT 앱을 완전히 종료한 뒤 다시 열어 주세요/);
+assert.doesNotMatch(buildMacScript(resolveSelection(new Set(["pnpm"]), "mac"), settings), /verify_media_tools|show_end_notes/);
+assert.doesNotMatch(videoClassMacScript, /install_project_folder\(\)/);
+
+const projectMac = buildMacScript(resolveSelection(new Set(["project-folder"]), "mac"), { ...settings, projectUrl: "https://example.com/a'b.zip", projectName: "lab", projectSha256: "" });
+assert.match(projectMac, /install_project_folder 'https:\/\/example\.com\/a'\\''b\.zip' 'lab' ''/);
+assert.match(projectMac, /--proto '=https' --proto-redir '=https'/);
+assert.match(projectMac, /\$HOME\/Documents\/\$name/);
+assert.doesNotMatch(projectMac, /\beval\b.*\$zip|source "\$stage|bash "\$stage/);
+
+{
+  // Run the generated macOS project-folder function with a stubbed curl and a temporary HOME.
+  const work = mkdtempSync(join(tmpdir(), "dev-setup-project-mac-"));
+  try {
+    mkdirSync(join(work, "src", "repo-main", "sub"), { recursive: true });
+    writeFileSync(join(work, "src", "repo-main", "README.md"), "# demo\n");
+    writeFileSync(join(work, "src", "repo-main", "sub", "a.txt"), "hi\n");
+    const zipPath = join(work, "p.zip");
+    assert.equal(spawnSync("zip", ["-qr", zipPath, "repo-main"], { cwd: join(work, "src") }).status, 0);
+    const sha = spawnSync("shasum", ["-a", "256", zipPath], { encoding: "utf8" }).stdout.split(" ")[0];
+    const fnStart = projectMac.indexOf("install_project_folder() {");
+    const fnEnd = projectMac.indexOf("\nrefresh_path\n");
+    const home = join(work, "home");
+    mkdirSync(home);
+    const run = (call) => spawnSync("bash", ["-c", [
+      "set -u",
+      `HOME='${home}'; TMPDIR='${work}'; LOG='${join(work, "log.txt")}'`,
+      'info() { :; }; ok() { echo "OK: $1"; }; warn() { echo "WARN: $1"; }; fail() { echo "FAIL: $1"; }',
+      `curl() { out=""; while [ $# -gt 0 ]; do [ "$1" = "-o" ] && out="$2"; shift; done; cp '${zipPath}' "$out"; }`,
+      projectMac.slice(fnStart, fnEnd),
+      call
+    ].join("\n")], { encoding: "utf8" });
+    const first = run(`install_project_folder 'https://example.com/r.zip' 'lab' '${sha.toUpperCase()}'`);
+    assert.match(first.stdout, /OK: .*lab/);
+    assert.equal(readFileSync(join(home, "Documents", "lab", "sub", "a.txt"), "utf8"), "hi\n");
+    assert.match(run("install_project_folder 'https://example.com/r.zip' 'lab' ''").stdout, /WARN: .*lab-\d{8}/);
+    assert.match(run(`install_project_folder 'https://example.com/r.zip' 'other' '${"0".repeat(64)}'`).stdout, /FAIL: .*SHA-256/);
+    assert.match(run("install_project_folder 'http://example.com/r.zip' 'x' ''").stdout, /FAIL:/);
+    assert.match(run("install_project_folder 'https://example.com/r.zip' '../x' ''").stdout, /FAIL:/);
+    assert.match(run("install_project_folder '' 'x' ''").stdout, /WARN:/);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
 
 const claudeCode = resolveSelection(new Set(["claude-code"]), "mac");
 const claudeCodeScript = buildMacScript(claudeCode, settings);

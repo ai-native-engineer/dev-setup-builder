@@ -26,7 +26,7 @@ test("builds scripts and captures primary states", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "개발 환경 설치 도우미" })).toBeVisible();
   await expect(page.getByRole("radio", { name: "macOS" })).toHaveAttribute("aria-checked", "true");
   await expect(toolList.getByRole("checkbox", { name: /Windows WSL2/ })).toHaveCount(0);
-  await expect(toolList.getByRole("checkbox")).toHaveCount(22);
+  await expect(toolList.getByRole("checkbox")).toHaveCount(23);
   await expect(toolList.getByRole("checkbox", { name: /Bun/ })).toBeChecked();
   await expect(toolList.getByRole("checkbox", { name: /Codex App/ })).toBeChecked();
   await expect(toolList.getByRole("checkbox", { name: /Git 사용자 정보 기본값/ })).toBeChecked();
@@ -238,4 +238,54 @@ test("checks dependencies and removes dependents consistently", async ({ page })
   await wsl2.click();
   await expect(wsl2).not.toBeChecked();
   await expect(engine).not.toBeChecked();
+});
+
+test("preselects the video-class preset from the URL and fills project fields", async ({ page }) => {
+  await page.goto("./?os=win&preset=video-class&project=https%3A%2F%2Fexample.com%2Flab.zip&name=kaist-shorts-lab");
+
+  const toolList = page.getByLabel("설치할 도구");
+  const preview = page.getByRole("textbox", { name: "생성된 설치 스크립트" });
+
+  for (const name of [/ChatGPT 데스크톱 앱 \(Codex 포함\)/, /FFmpeg/, /yt-dlp/, /Deno/, /프로젝트 폴더/]) {
+    await expect(toolList.getByRole("checkbox", { name })).toBeChecked();
+  }
+  for (const name of [/Windows WSL2/, /^Node\.js/]) {
+    await expect(toolList.getByRole("checkbox", { name })).not.toBeChecked();
+  }
+  await expect(page.getByRole("textbox", { name: /ZIP 주소/ })).toHaveValue("https://example.com/lab.zip");
+  await expect(page.getByRole("textbox", { name: "폴더 이름" })).toHaveValue("kaist-shorts-lab");
+  await expect(preview).toHaveValue(/Install-ProjectFolder -Url 'https:\/\/example\.com\/lab\.zip' -Name 'kaist-shorts-lab'/);
+  await expect(preview).toHaveValue(/Test-MediaTools/);
+  await expect(preview).not.toHaveValue(/irm https|Invoke-Expression/);
+  await expect.poll(() => page.url()).toContain("preset=video-class");
+  await expect.poll(() => page.url()).toContain("project=https%3A%2F%2Fexample.com%2Flab.zip");
+  await expect.poll(() => page.url()).toContain("name=kaist-shorts-lab");
+});
+
+test("applies preset buttons and copies a preset link", async ({ page }) => {
+  await page.goto("./?os=win");
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(page.url()).origin });
+
+  await page.getByRole("button", { name: "영상 수업" }).click();
+  const toolList = page.getByLabel("설치할 도구");
+  await expect(toolList.getByRole("checkbox", { name: /FFmpeg/ })).toBeChecked();
+  await expect(toolList.getByRole("checkbox", { name: /Node\.js/ })).not.toBeChecked();
+  await expect(page.getByRole("textbox", { name: "생성된 설치 스크립트" })).toHaveValue(/Test-MediaTools/);
+
+  await page.getByRole("button", { name: /링크 복사/ }).click();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain("os=win");
+  expect(copied).toContain("preset=video-class");
+  expect(copied).not.toContain("tools=");
+
+  await page.getByRole("button", { name: "기본 개발 환경" }).click();
+  await expect(toolList.getByRole("checkbox", { name: /FFmpeg/ })).not.toBeChecked();
+  await expect(toolList.getByRole("checkbox", { name: /^Node\.js/ })).toBeChecked();
+});
+
+test("shows the macOS Codex label and the Windows ChatGPT label", async ({ page }) => {
+  await page.goto("./?os=mac");
+  await expect(page.getByLabel("설치할 도구").getByRole("checkbox", { name: /Codex App/ })).toBeVisible();
+  await page.getByRole("radio", { name: "Windows" }).click();
+  await expect(page.getByLabel("설치할 도구").getByRole("checkbox", { name: /ChatGPT 데스크톱 앱 \(Codex 포함\)/ })).toBeVisible();
 });

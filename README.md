@@ -8,12 +8,14 @@ Live site: <https://ai-native-engineer.github.io/dev-setup-builder/>
 
 - Core tools: Git, Node.js, pnpm, Python, uv, Bun, Docker Desktop, Docker Engine (Colima on macOS or Docker CE in WSL2 Ubuntu on Windows), and Windows WSL2.
 - Editor tools: VS Code and the Claude Code VS Code extension.
-- AI tools: Claude Desktop, Claude Code CLI, Codex App, and Codex CLI.
+- AI tools: Claude Desktop, Claude Code CLI, ChatGPT desktop app (includes Codex; Store product `9PLM9XGG6VKS`, shown as Codex App on macOS), and Codex CLI.
 - Media tools: FFmpeg, yt-dlp, and Deno (the JavaScript runtime yt-dlp needs for YouTube). yt-dlp pulls in Deno automatically. On Windows these use WinGet portable packages (`Gyan.FFmpeg.Essentials`, `yt-dlp.yt-dlp`, `DenoLand.Deno`) with `--scope user`; on macOS they use Homebrew formulae.
+- Project folder: downloads a zip over HTTPS (GitHub archive or release asset) into `Documents/<name>`, verifies an optional SHA-256, never overwrites an existing folder (uses `<name>-YYYYMMDD` or skips), and never runs downloaded files. Folder names allow only letters, digits, `.`, `_`, `-`.
+- Media verify step: when FFmpeg, yt-dlp, or Deno is selected, the script ends with a Korean per-tool summary (installed + version, or failed + what to do), checks that `ffmpeg -filters` contains `drawtext`, and tells the user to fully quit and reopen the ChatGPT app. The Windows `.bat` stays ASCII-only: Korean strings are emitted as `\uXXXX` escapes and decoded by PowerShell.
 - Source control tools: GitHub CLI, GitHub auth check, GitLab CLI, and Git identity defaults.
 - Optional deployment tool: Vercel CLI.
 
-The `video-class` preset (`presetSelection("video-class")`) selects Codex App, FFmpeg, yt-dlp, and Deno for non-developer video classes. It does not add WSL2, Git, or Node.js.
+The `video-class` preset (`presetSelection("video-class")`) selects Codex App, FFmpeg, yt-dlp, and Deno for non-developer video classes. It does not add WSL2, Git, or Node.js. Presets are also UI buttons and URL parameters: `?os=win&preset=video-class&project=<zip-url>&name=<folder>[&sha256=<hex>]` preselects the items and fills the project fields, and the copy-link button produces that short form when the selection matches a preset.
 
 Advanced observability settings for Claude Code CLI and Codex CLI are opt-in. They stay off by default, and the UI's "select all" action does not enable them. Prompt/body collection toggles are also off by default.
 
