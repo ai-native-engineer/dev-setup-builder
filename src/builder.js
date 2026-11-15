@@ -298,8 +298,10 @@ function sh(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
+// PowerShell treats ASCII ' and the typographic quotes U+2018, U+2019, U+201A, U+201B as single-quote delimiters.
+// Doubling any of them inside a single-quoted string yields the literal character.
 function ps(value) {
-  return `'${String(value).replace(/'/g, "''")}'`;
+  return `'${String(value).replace(/['\u2018\u2019\u201A\u201B]/g, "$&$&")}'`;
 }
 
 function boolSetting(settings, key) {
