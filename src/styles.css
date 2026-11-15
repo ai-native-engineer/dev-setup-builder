@@ -172,6 +172,13 @@ body {
   gap: 8px;
 }
 
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .package-list {
   overflow-y: auto;
   overflow-x: hidden;

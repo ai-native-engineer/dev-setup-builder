@@ -30,6 +30,7 @@ import {
   autoAdded,
   buildScript,
   deselectWithDependents,
+  presetSelection,
   fileName,
   resolveSelection,
   selectWithDependencies,
@@ -60,8 +61,19 @@ const DEFAULT_SETTINGS = {
   codexLogExporter: "otlp",
   codexTraceExporter: "none",
   codexMetricsExporter: "none",
-  codexLogUserPrompt: false
+  codexLogUserPrompt: false,
+  projectUrl: "",
+  projectName: "",
+  projectSha256: ""
 };
+
+const PRESETS = [
+  ["minimal", "기본 개발 환경"],
+  ["agent", "AI 에이전트 개발"],
+  ["video-class", "영상 수업"]
+];
+const PRESET_NAMES = new Set(PRESETS.map(([name]) => name));
+const URL_PARAM_ALIASES = { projectUrl: "project", projectName: "name", projectSha256: "sha256" };
 
 const OTEL_PROTOCOL_OPTIONS = [
   ["grpc", "gRPC"],
@@ -117,6 +129,7 @@ const GROUP_LABELS = {
   Editor: "에디터",
   "AI tools": "AI 도구",
   Media: "미디어 도구",
+  Project: "프로젝트",
   "Web deploy": "웹 배포",
   "Source control": "소스 관리",
   Advanced: "고급 설정"
@@ -146,7 +159,11 @@ const PACKAGE_TEXT = {
   "claude-code": { note: "Claude Code 명령줄 도구입니다. 공식 설치 순서를 우선 사용합니다." },
   "claude-code-telemetry": { label: "Claude Code 관측 로그", note: "Claude Code 실행 로그 설정을 추가합니다." },
   "claude-extension": { label: "Claude Code VS Code 확장", note: "VS Code에서 Claude Code를 쓰기 위한 확장입니다." },
-  "codex-app": { note: "Codex 데스크톱 앱입니다." },
+  "codex-app": {
+    label: { mac: "Codex App", win: "ChatGPT 데스크톱 앱 (Codex 포함)" },
+    note: { mac: "Codex 데스크톱 앱입니다.", win: "OpenAI ChatGPT 데스크톱 앱입니다. Codex가 포함되어 있습니다." }
+  },
+  "project-folder": { label: "프로젝트 폴더", note: "ZIP 주소에서 내려받아 문서 폴더에 풉니다. 기존 폴더를 덮어쓰지 않고, 받은 파일을 실행하지 않습니다." },
   codex: { note: "Codex 명령줄 도구입니다. 공식 설치 순서를 우선 사용합니다." },
   "codex-telemetry": { label: "Codex 관측 로그", note: "Codex 실행 로그 설정을 추가합니다." },
   ffmpeg: { note: "영상과 오디오를 변환하고 자르는 ffmpeg 명령을 설치합니다." },
@@ -233,8 +250,12 @@ const PERMISSION_HELP = {
   ]
 };
 
-function packageLabel(item) {
-  return PACKAGE_TEXT[item.id]?.label || item.label;
+function packageLabel(item, os) {
+  const label = PACKAGE_TEXT[item.id]?.label;
+  if (label && typeof label === "object") {
+    return label[os] || item.label;
+  }
+  return label || item.label;
 }
 
 function packageNote(item, os) {
@@ -242,7 +263,7 @@ function packageNote(item, os) {
   const base = typeof note === "object" ? note[os] : note || item.note;
   const dependencies = (item.deps[os] || []).map((id) => {
     const dependency = PACKAGE_BY_ID.get(id);
-    return dependency ? packageLabel(dependency) : SYSTEM_PACKAGE_LABELS[id] || id;
+    return dependency ? packageLabel(dependency, os) : SYSTEM_PACKAGE_LABELS[id] || id;
   });
   return dependencies.length ? `${base} 필요 항목: ${dependencies.join(", ")} (자동 선택).` : base;
 }
@@ -296,7 +317,7 @@ function SettingTextInput(props) {
 }
 
 function allSelection() {
-  return new Set(PACKAGES.filter((item) => !ADVANCED_PACKAGE_IDS.has(item.id) && item.id !== "docker").map((item) => item.id));
+  return new Set(PACKAGES.filter((item) => !ADVANCED_PACKAGE_IDS.has(item.id) && item.id !== "docker" && item.id !== "project-folder").map((item) => item.id));
 }
 
 function parseUrlState() {
@@ -307,21 +328,29 @@ function parseUrlState() {
   const params = new URLSearchParams(window.location.search);
   const targetOs = params.get("os") === "win" ? "win" : "mac";
   let selected = allSelection();
+  const projectUrl = params.get("project") ?? params.get("projectUrl") ?? "";
+  const preset = params.get("preset");
 
   if (params.has("tools")) {
     selected = new Set(params.get("tools").split(",").filter((id) => PACKAGE_IDS.has(id)));
     if (selected.has("docker-engine")) {
       selected.delete("docker");
     }
+  } else if (PRESET_NAMES.has(preset)) {
+    selected = presetSelection(preset);
+  }
+  if (!params.has("tools") && projectUrl) {
+    selected.add("project-folder");
   }
   selected = selectWithDependencies(selected, targetOs);
 
   const settings = { ...DEFAULT_SETTINGS };
   for (const key of URL_SETTING_KEYS) {
-    if (!params.has(key)) {
+    const paramName = [URL_PARAM_ALIASES[key], key].find((name) => name && params.has(name));
+    if (!paramName) {
       continue;
     }
-    const value = params.get(key);
+    const value = params.get(paramName);
     settings[key] = typeof DEFAULT_SETTINGS[key] === "boolean" ? value === "1" : value;
   }
 
@@ -336,15 +365,28 @@ function settingParam(value) {
   return typeof value === "boolean" ? (value ? "1" : "0") : value;
 }
 
+function matchingPreset(selected, os, settings) {
+  const expectedExtra = settings.projectUrl ? ["project-folder"] : [];
+  return PRESETS.map(([name]) => name).find((name) => {
+    const expected = selectWithDependencies(new Set([...presetSelection(name), ...expectedExtra]), os);
+    return expected.size === selected.size && [...expected].every((id) => selected.has(id));
+  });
+}
+
 function urlSearch(os, selected, settings) {
   const params = new URLSearchParams();
   params.set("os", os);
-  params.set("tools", selectedParam(selected, os));
+  const preset = matchingPreset(selected, os, settings);
+  if (preset) {
+    params.set("preset", preset);
+  } else {
+    params.set("tools", selectedParam(selected, os));
+  }
 
   for (const key of URL_SETTING_KEYS) {
     const value = settings[key];
     if (value !== DEFAULT_SETTINGS[key]) {
-      params.set(key, settingParam(value));
+      params.set(URL_PARAM_ALIASES[key] || key, settingParam(value));
     }
   }
 
@@ -459,6 +501,16 @@ function App() {
     });
   }
 
+  function applyPreset(name) {
+    const base = new Set(presetSelection(name));
+    if (settings.projectUrl) {
+      base.add("project-folder");
+    }
+    setSelected(selectWithDependencies(base, os));
+    setStatus(STATUS_TEXT.ready);
+    setLastAction("");
+  }
+
   function updateSetting(key, value) {
     setSettings((current) => ({ ...current, [key]: value }));
   }
@@ -497,6 +549,38 @@ function App() {
               onChange={(value) => updateSetting("gitEmail", value)}
               type="email"
             />
+          </div>
+        </Collapsible>
+      );
+    }
+
+    if (item.id === "project-folder") {
+      return (
+        <Collapsible className="package-settings" trigger="프로젝트 폴더 설정" defaultIsOpen>
+          <div className="settings">
+            <SettingTextInput
+              htmlName="projectUrl"
+              label="ZIP 주소 (https)"
+              value={settings.projectUrl}
+              onChange={(value) => updateSetting("projectUrl", value)}
+              placeholder="https://github.com/owner/repo/archive/refs/heads/main.zip"
+            />
+            <div className="settings-grid">
+              <SettingTextInput
+                htmlName="projectName"
+                label="폴더 이름"
+                value={settings.projectName}
+                onChange={(value) => updateSetting("projectName", value)}
+                placeholder="my-project"
+              />
+              <SettingTextInput
+                htmlName="projectSha256"
+                label="SHA-256 (선택)"
+                value={settings.projectSha256}
+                onChange={(value) => updateSetting("projectSha256", value)}
+                placeholder="64자리 16진수"
+              />
+            </div>
           </div>
         </Collapsible>
       );
@@ -664,6 +748,11 @@ function App() {
               <Button label="전체 선택" onClick={() => setSelected(allSelection())} size="sm" variant="secondary" />
               <Button label="전체 해제" onClick={() => setSelected(new Set())} size="sm" variant="secondary" />
             </div>
+            <div className="preset-row" role="group" aria-label="프리셋">
+              {PRESETS.map(([name, label]) => (
+                <Button key={name} label={label} onClick={() => applyPreset(name)} size="sm" variant="secondary" />
+              ))}
+            </div>
           </div>
 
           <div className="package-list" aria-label="설치할 도구">
@@ -704,7 +793,7 @@ function App() {
                         >
                           <CheckboxInput
                             className="package"
-                            label={packageLabel(item)}
+                            label={packageLabel(item, os)}
                             labelIcon={packageIcon(item.id)}
                             description={packageNote(item, os)}
                             value={selected.has(item.id)}

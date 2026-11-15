@@ -66,6 +66,20 @@ const pnpmOnly = buildWindowsScript(resolveSelection(new Set(["pnpm"]), "win"), 
 assert.doesNotMatch(pnpmOnly, /function Install-CodexApp/);
 assert.doesNotMatch(videoClassScript, /^Set-(ClaudeCode|Codex)Telemetry /m);
 
+// Generated .bat stays ASCII-only; Korean text is emitted as \\uXXXX escapes decoded by PowerShell.
+assert.equal(/[^\x00-\x7f]/.test(videoClassScript), false);
+assert.match(videoClassScript, /function KR\(\[string\]\$Escaped\) \{ return \[regex\]::Unescape\(\$Escaped\) \}/);
+assert.match(videoClassScript, /(^|\r\n)Test-MediaTools(\r\n|$)/);
+assert.match(videoClassScript, /ffmpeg -hide_banner -filters/);
+assert.match(videoClassScript, /drawtext/);
+assert.match(videoClassScript, /function Show-EndNotes/);
+assert.match(videoClassScript, /\r\nShow-EndNotes\r\nexit 0$/);
+assert.match(videoClassScript, /ChatGPT \\uC571\\uC744 \\uC644\\uC804\\uD788 \\uC885\\uB8CC/);
+assert.doesNotMatch(videoClassScript, /function Install-ProjectFolder/);
+assert.doesNotMatch(buildWindowsScript(resolveSelection(new Set(["pnpm"]), "win"), settings), /Test-MediaTools|Show-EndNotes/);
+assert.match(buildWindowsScript(resolveSelection(new Set(["codex-app"]), "win"), settings), /ChatGPT desktop app \(includes Codex\)/);
+assert.match(videoClassScript, /9PLM9XGG6VKS/);
+
 const ytDlp = resolveSelection(new Set(["yt-dlp"]), "win");
 assert.equal(ytDlp.has("deno"), true);
 
@@ -127,6 +141,77 @@ assert.match(commandDetector, /Test-Path \$command\.Source -PathType Leaf/);
 assert.match(commandDetector, /--version/);
 assert.match(pythonBody, /-DeferFailure/);
 assert.match(pythonBody, /if \(-not \$pythonOk\) \{ Fail 'Python' \}/);
+
+// Project folder: static content checks.
+const projectSettings = { ...settings, projectUrl: "https://example.com/a'b/repo.zip", projectName: "kaist-shorts-lab", projectSha256: "" };
+const projectScript = buildWindowsScript(resolveSelection(new Set(["project-folder"]), "win"), projectSettings);
+assert.match(projectScript, /Install-ProjectFolder -Url 'https:\/\/example\.com\/a''b\/repo\.zip' -Name 'kaist-shorts-lab' -Sha256 ''/);
+assert.match(projectScript, /\^https:\/\//);
+assert.match(projectScript, /Get-FileHash -Algorithm SHA256/);
+assert.match(projectScript, /unsafe path in zip/);
+assert.doesNotMatch(projectScript, /Expand-Archive|Start-Process|Invoke-Expression|\biex\b|\birm\b/);
+assert.equal(/[^\x00-\x7f]/.test(projectScript), false);
+
+// Project folder: run the generated function in PowerShell with a stubbed download.
+{
+  const work = mkdtempSync(join(tmpdir(), "dev-setup-project-"));
+  try {
+    const zipSource = join(work, "src");
+    mkdirSync(join(zipSource, "repo-main", "sub"), { recursive: true });
+    writeFileSync(join(zipSource, "repo-main", "README.md"), "# demo\n");
+    writeFileSync(join(zipSource, "repo-main", "sub", "a.txt"), "hi\n");
+    const zipPath = join(work, "p.zip");
+    const zipResult = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", `Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::CreateFromDirectory('${zipSource}', '${zipPath}')`], { encoding: "utf8" });
+    assert.equal(zipResult.status, 0, zipResult.stderr || zipResult.stdout);
+    const sha = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", `(Get-FileHash -Algorithm SHA256 -LiteralPath '${zipPath}').Hash`], { encoding: "utf8" }).stdout.trim();
+    assert.match(sha, /^[0-9A-F]{64}$/);
+
+    const fnStart = projectScript.indexOf("function KR");
+    const fnEnd = projectScript.indexOf("\r\nRefresh-Path\r\n");
+    const helperText = projectScript.slice(fnStart, fnEnd)
+      .replace("[Environment]::GetFolderPath('MyDocuments')", `'${join(work, "Documents")}'`);
+    const run = (calls) => spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "-"], {
+      input: [
+        "$script:Failed = @()",
+        `$env:TEMP = '${work}'`,
+        "$LogFile = Join-Path $env:TEMP 'log.txt'",
+        "function Step([string]$Text) {}",
+        "function Ok([string]$Text) { Write-Output \"OK: $Text\" }",
+        "function Warn([string]$Text) { Write-Output \"WARN: $Text\" }",
+        "function Fail([string]$Text) { Write-Output \"FAIL: $Text\"; $script:Failed += $Text }",
+        `function Invoke-WebRequest { param($Uri, $OutFile, [switch]$UseBasicParsing, [switch]$PassThru) Copy-Item '${zipPath}' $OutFile; return [pscustomobject]@{ BaseResponse = [pscustomobject]@{ ResponseUri = [uri]$Uri } } }`,
+        helperText,
+        ...calls
+      ].join("\n"),
+      encoding: "utf8",
+      env: { ...process.env, LC_ALL: "C.UTF-8" }
+    });
+    const url = "https://example.com/repo.zip";
+    const first = run([`Install-ProjectFolder -Url '${url}' -Name 'lab' -Sha256 '${sha.toLowerCase()}'`]);
+    assert.match(first.stdout, /OK: .*lab/);
+    assert.equal(readFileSync(join(work, "Documents", "lab", "README.md"), "utf8"), "# demo\n");
+    assert.equal(readFileSync(join(work, "Documents", "lab", "sub", "a.txt"), "utf8"), "hi\n");
+
+    const second = run([`Install-ProjectFolder -Url '${url}' -Name 'lab' -Sha256 ''`]);
+    assert.match(second.stdout, /WARN: .*lab-\d{8}/);
+    assert.equal(readFileSync(join(work, "Documents", "lab", "README.md"), "utf8"), "# demo\n");
+
+    const third = run([`Install-ProjectFolder -Url '${url}' -Name 'lab' -Sha256 ''`]);
+    assert.match(third.stdout, /WARN: .*lab-\d{8}/);
+    assert.doesNotMatch(third.stdout, /OK:/);
+
+    const mismatch = run([`Install-ProjectFolder -Url '${url}' -Name 'other' -Sha256 '${"0".repeat(64)}'`]);
+    assert.match(mismatch.stdout, /FAIL: .*SHA-256/);
+    assert.equal(spawnSync("pwsh", ["-NoProfile", "-Command", `Test-Path '${join(work, "Documents", "other")}'`], { encoding: "utf8" }).stdout.trim(), "False");
+
+    for (const [name, args] of [["http", `-Url 'http://example.com/a.zip' -Name 'x' -Sha256 ''`], ["name", `-Url '${url}' -Name '../x' -Sha256 ''`], ["sha", `-Url '${url}' -Name 'x' -Sha256 'zz'`]]) {
+      assert.match(run([`Install-ProjectFolder ${args}`]).stdout, /FAIL:/, name);
+    }
+    assert.match(run(["Install-ProjectFolder -Url '' -Name 'x' -Sha256 ''"]).stdout, /WARN:/);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
 
 const claudeTelemetry = resolveSelection(new Set(["claude-code-telemetry"]), "win");
 const claudeTelemetryScript = buildWindowsScript(claudeTelemetry, {
