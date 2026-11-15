@@ -142,7 +142,7 @@ export const PACKAGES = [
     group: "AI tools",
     label: "Codex App",
     note: "Installs the official OpenAI Codex desktop app.",
-    presets: [],
+    presets: ["video-class"],
     deps: { mac: [], win: [] },
     mac: () => ["install_codex_app"],
     win: () => ["Install-CodexApp"]
@@ -166,6 +166,36 @@ export const PACKAGES = [
     deps: { mac: ["codex"], win: ["codex"] },
     mac: (settings) => [`configure_codex_telemetry ${telemetryArgs(settings)}`],
     win: (settings) => [`Set-CodexTelemetry ${telemetryArgs(settings, ps)}`]
+  },
+  {
+    id: "ffmpeg",
+    group: "Media",
+    label: "FFmpeg",
+    note: "Video and audio conversion tool (ffmpeg command).",
+    presets: ["video-class"],
+    deps: { mac: ["homebrew"], win: [] },
+    mac: () => ['brew_formula "FFmpeg" "ffmpeg" "ffmpeg"'],
+    win: () => ["Install-Winget -Label 'FFmpeg' -PackageId 'Gyan.FFmpeg.Essentials' -Command 'ffmpeg' -ExtraArgs @('--scope','user')"]
+  },
+  {
+    id: "deno",
+    group: "Media",
+    label: "Deno",
+    note: "JavaScript runtime that yt-dlp needs for YouTube.",
+    presets: ["video-class"],
+    deps: { mac: ["homebrew"], win: [] },
+    mac: () => ['brew_formula "Deno" "deno" "deno"'],
+    win: () => ["Install-Winget -Label 'Deno' -PackageId 'DenoLand.Deno' -Command 'deno' -ExtraArgs @('--scope','user')"]
+  },
+  {
+    id: "yt-dlp",
+    group: "Media",
+    label: "yt-dlp",
+    note: "Video downloader. Installs Deno first because YouTube needs a JavaScript runtime.",
+    presets: ["video-class"],
+    deps: { mac: ["homebrew", "deno"], win: ["deno"] },
+    mac: () => ['brew_formula "yt-dlp" "yt-dlp" "yt-dlp"'],
+    win: () => ["Install-Winget -Label 'yt-dlp' -PackageId 'yt-dlp.yt-dlp' -Command 'yt-dlp' -ExtraArgs @('--scope','user')"]
   },
   {
     id: "vercel",
@@ -1251,6 +1281,8 @@ export function selfTest() {
     claudeNativeIndex >= 0 && claudeNativeIndex < claudeBrewIndex && claudeBrewIndex < claudeNpmIndex,
     buildMacScript(new Set(["homebrew", "docker"]), settings).includes('brew_cask "Docker Desktop" "docker"'),
     buildWindowsScript(new Set(["docker"]), settings).includes("Docker.DockerDesktop"),
+    buildMacScript(resolveSelection(new Set(["yt-dlp"]), "mac"), settings).includes('brew_formula "Deno"'),
+    buildWindowsScript(resolveSelection(new Set(["yt-dlp"]), "win"), settings).includes("DenoLand.Deno"),
     buildMacScript(resolveSelection(new Set(["docker-engine"]), "mac"), settings).includes("colima start"),
     buildWindowsScript(resolveSelection(new Set(["docker-engine"]), "win"), settings).includes("docker-ce docker-ce-cli")
   ];

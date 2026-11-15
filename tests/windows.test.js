@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildWindowsScript,
+  presetSelection,
   resolveSelection,
   selfTest
 } from "../src/builder.js";
@@ -38,6 +39,23 @@ assert.equal(codexApp.has("node"), false);
 assert.match(codexAppScript, /(^|\r\n)Install-CodexApp(\r\n|$)/);
 assert.match(codexAppScript, /9PLM9XGG6VKS/);
 assert.match(codexAppScript, /--source msstore/);
+
+const videoClass = presetSelection("video-class");
+assert.deepEqual(videoClass, new Set(["codex-app", "ffmpeg", "deno", "yt-dlp"]));
+const videoClassResolved = resolveSelection(videoClass, "win");
+const videoClassScript = buildWindowsScript(videoClassResolved, settings);
+for (const id of ["wsl2", "git", "node"]) {
+  assert.equal(videoClassResolved.has(id), false, `${id} must stay out of the video-class preset`);
+}
+assert.match(videoClassScript, /Install-Winget -Label 'FFmpeg' -PackageId 'Gyan\.FFmpeg\.Essentials' -Command 'ffmpeg' -ExtraArgs @\('--scope','user'\)/);
+assert.match(videoClassScript, /Install-Winget -Label 'Deno' -PackageId 'DenoLand\.Deno' -Command 'deno' -ExtraArgs @\('--scope','user'\)/);
+assert.match(videoClassScript, /Install-Winget -Label 'yt-dlp' -PackageId 'yt-dlp\.yt-dlp' -Command 'yt-dlp' -ExtraArgs @\('--scope','user'\)/);
+assert.equal(videoClassScript.indexOf("-PackageId 'DenoLand.Deno'") < videoClassScript.indexOf("-PackageId 'yt-dlp.yt-dlp'"), true);
+assert.doesNotMatch(videoClassScript, /Install-WSL2\r\n/);
+assert.doesNotMatch(videoClassScript, /^Set-(ClaudeCode|Codex)Telemetry /m);
+
+const ytDlp = resolveSelection(new Set(["yt-dlp"]), "win");
+assert.equal(ytDlp.has("deno"), true);
 
 const extension = resolveSelection(new Set(["claude-extension"]), "win");
 const extensionScript = buildWindowsScript(extension, settings);

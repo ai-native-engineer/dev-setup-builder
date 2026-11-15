@@ -116,6 +116,7 @@ const GROUP_LABELS = {
   Core: "기본 도구",
   Editor: "에디터",
   "AI tools": "AI 도구",
+  Media: "미디어 도구",
   "Web deploy": "웹 배포",
   "Source control": "소스 관리",
   Advanced: "고급 설정"
@@ -148,6 +149,9 @@ const PACKAGE_TEXT = {
   "codex-app": { note: "Codex 데스크톱 앱입니다." },
   codex: { note: "Codex 명령줄 도구입니다. 공식 설치 순서를 우선 사용합니다." },
   "codex-telemetry": { label: "Codex 관측 로그", note: "Codex 실행 로그 설정을 추가합니다." },
+  ffmpeg: { note: "영상과 오디오를 변환하고 자르는 ffmpeg 명령을 설치합니다." },
+  deno: { note: "yt-dlp가 YouTube를 읽을 때 필요한 JavaScript 실행 환경입니다." },
+  "yt-dlp": { note: "영상 다운로드 도구입니다. YouTube용 Deno를 먼저 설치합니다." },
   vercel: { note: "Vercel 배포용 명령줄 도구를 설치합니다." },
   gh: { note: "GitHub 작업용 gh 명령을 설치합니다." },
   "github-auth": { label: "GitHub CLI 로그인", note: "GitHub CLI 로그인 상태를 확인하고 필요한 명령을 안내합니다." },
