@@ -10,6 +10,10 @@ import {
 
 const settings = { gitName: "A", gitEmail: "a@example.com" };
 
+const chromeDevtoolsMac = resolveSelection(new Set(["chrome-devtools"]), "mac");
+assert.equal(chromeDevtoolsMac.has("node"), true);
+assert.match(buildMacScript(chromeDevtoolsMac, settings), /npm_global "chrome-devtools" "chrome-devtools-mcp@latest" "chrome-devtools"/);
+
 const codex = resolveSelection(new Set(["codex"]), "mac");
 const codexScript = buildMacScript(codex, settings);
 const nodeIndex = codexScript.indexOf('brew_formula "Node.js"');

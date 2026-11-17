@@ -153,6 +153,7 @@ const PACKAGE_TEXT = {
   deno: { note: "yt-dlp가 YouTube를 읽을 때 필요한 JavaScript 실행 환경입니다." },
   "yt-dlp": { note: "영상 다운로드 도구입니다. YouTube용 Deno를 먼저 설치합니다." },
   vercel: { note: "Vercel 배포용 명령줄 도구를 설치합니다." },
+  "chrome-devtools": { label: "Chrome DevTools CLI", note: "터미널에서 Chrome을 열고 화면, 콘솔, 네트워크를 확인하는 명령을 설치합니다." },
   gh: { note: "GitHub 작업용 gh 명령을 설치합니다." },
   "github-auth": { label: "GitHub CLI 로그인", note: "GitHub CLI 로그인 상태를 확인하고 필요한 명령을 안내합니다." },
   glab: { note: "GitLab 작업용 glab 명령을 설치합니다." },
