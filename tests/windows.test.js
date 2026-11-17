@@ -69,6 +69,12 @@ assert.doesNotMatch(videoClassScript, /^Set-(ClaudeCode|Codex)Telemetry /m);
 const ytDlp = resolveSelection(new Set(["yt-dlp"]), "win");
 assert.equal(ytDlp.has("deno"), true);
 
+const chromeDevtools = resolveSelection(new Set(["chrome-devtools"]), "win");
+const chromeDevtoolsScript = buildWindowsScript(chromeDevtools, settings);
+assert.equal(chromeDevtools.has("node"), true);
+assert.ok(chromeDevtoolsScript.indexOf("Install-Winget -Label 'Node.js LTS'") < chromeDevtoolsScript.indexOf("Install-NpmGlobal -Label 'chrome-devtools'"));
+assert.match(chromeDevtoolsScript, /chrome-devtools-mcp@latest/);
+
 const extension = resolveSelection(new Set(["claude-extension"]), "win");
 const extensionScript = buildWindowsScript(extension, settings);
 
