@@ -208,6 +208,16 @@ export const PACKAGES = [
     win: () => ["Install-NpmGlobal -Label 'Vercel CLI' -Package 'vercel' -Command 'vercel'"]
   },
   {
+    id: "chrome-devtools",
+    group: "Web deploy",
+    label: "Chrome DevTools CLI",
+    note: "Installs chrome-devtools (chrome-devtools-mcp) with npm.",
+    presets: [],
+    deps: { mac: ["node"], win: ["node"] },
+    mac: () => ['npm_global "chrome-devtools" "chrome-devtools-mcp@latest" "chrome-devtools"'],
+    win: () => ["Install-NpmGlobal -Label 'chrome-devtools' -Package 'chrome-devtools-mcp@latest' -Command 'chrome-devtools'"]
+  },
+  {
     id: "gh",
     group: "Source control",
     label: "GitHub CLI",
